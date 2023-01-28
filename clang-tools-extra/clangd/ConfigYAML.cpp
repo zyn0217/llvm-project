@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "ConfigFragment.h"
+#include "support/Logger.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
@@ -68,6 +69,7 @@ public:
     Dict.handle("Completion", [&](Node &N) { parse(F.Completion, N); });
     Dict.handle("Hover", [&](Node &N) { parse(F.Hover, N); });
     Dict.handle("InlayHints", [&](Node &N) { parse(F.InlayHints, N); });
+    Dict.handle("Preamble", [&](Node &N) { parse(F.Preamble, N); });
     Dict.parse(N);
     return !(N.failed() || HadError);
   }
@@ -247,6 +249,15 @@ private:
     Dict.handle("Designators", [&](Node &N) {
       if (auto Value = boolValue(N, "Designators"))
         F.Designators = *Value;
+    });
+    Dict.parse(N);
+  }
+
+  void parse(Fragment::PreambleBlock &F, Node &N) {
+    DictParser Dict("Preamble", this);
+    Dict.handle("ParseFunctionBodyHeaderList", [&](Node &N) {
+      if (auto Value = scalarValues(N))
+        F.ParseFunctionBodyHeaderList = *Value;
     });
     Dict.parse(N);
   }

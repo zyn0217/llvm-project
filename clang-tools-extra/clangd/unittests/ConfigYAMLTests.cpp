@@ -273,6 +273,21 @@ Style:
   EXPECT_THAT(Results[0].Style.FullyQualifiedNamespaces,
               ElementsAre(val("foo"), val("bar")));
 }
+
+TEST(ParseYAML, Preamble) {
+  CapturedDiags Diags;
+  Annotations YAML(R"yaml(
+Preamble:
+  ParseFunctionBodyHeaderList: [foo,bar]
+)yaml");
+  auto Results =
+      Fragment::parseYAML(YAML.code(), "config.yaml", Diags.callback());
+  ASSERT_THAT(Diags.Diagnostics, IsEmpty());
+  ASSERT_EQ(Results.size(), 1u);
+  EXPECT_THAT(Results[0].Preamble.ParseFunctionBodyHeaderList,
+              ElementsAre(val("foo"), val("bar")));
+}
+
 } // namespace
 } // namespace config
 } // namespace clangd

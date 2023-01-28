@@ -307,6 +307,14 @@ struct Fragment {
     std::optional<Located<bool>> Designators;
   };
   InlayHintsBlock InlayHints;
+
+  /// Configures Preamble building options.
+  struct PreambleBlock {
+    /// Specify headers in which we parse all function bodies
+    std::vector<Located<std::string>> ParseFunctionBodyHeaderList;
+  };
+  PreambleBlock Preamble;
+
 };
 
 } // namespace config

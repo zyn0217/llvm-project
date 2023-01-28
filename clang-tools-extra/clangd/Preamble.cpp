@@ -18,12 +18,16 @@
 #include "clang/AST/DeclTemplate.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticLex.h"
+#include "clang/Basic/FileEntry.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TokenKinds.h"
+#include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/CompilerInvocation.h"
+#include "clang/Frontend/FrontendAction.h"
 #include "clang/Frontend/FrontendActions.h"
+#include "clang/Frontend/PrecompiledPreamble.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/Lexer.h"
 #include "clang/Lex/PPCallbacks.h"
@@ -34,7 +38,6 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -62,13 +65,149 @@ bool compileCommandsAreEqual(const tooling::CompileCommand &LHS,
          llvm::ArrayRef(LHS.CommandLine).equals(RHS.CommandLine);
 }
 
+class CppHeaderCollector {
+private:
+  struct FileSwitchCallback : PPCallbacks {
+    CompilerInstance &CI;
+    CppHeaderCollector &CB;
+
+    FileSwitchCallback(CompilerInstance &CI, CppHeaderCollector &CB)
+        : CI(CI), CB(CB) {}
+
+    virtual void LexedFileChanged(FileID FID, LexedFileChangeReason Reason,
+                                  SrcMgr::CharacteristicKind FileType,
+                                  FileID PrevFID, SourceLocation Loc) override {
+      auto &SM = CI.getSourceManager();
+      const auto File = SM.getFileID(Loc);
+      const auto FE = SM.getFileEntryForID(File);
+      if (Reason == LexedFileChangeReason::EnterFile) {
+        CB.onEnteringFile(FE);
+      } else if (Reason == LexedFileChangeReason::ExitFile) {
+        CB.onLeavingFile(FE);
+      }
+    }
+
+    virtual void FileSkipped(const FileEntryRef &SkippedFile,
+                             const Token &FilenameTok,
+                             SrcMgr::CharacteristicKind FileType) override
+    {
+      // log("Preamble: skipped: {0}", SkippedFile.getName());
+      // Skipped files won't be invoked from `LexedFileChanged`
+      CB.onEnteringFile(SkippedFile);
+      CB.onLeavingFile(SkippedFile);
+    }
+  };
+
+public:
+  CppHeaderCollector(CompilerInvocation &CI) {
+    HeaderStack.push("__root__");
+    NodeKeys.emplace_back(std::make_shared<std::string>("__root__"));
+    IG.try_emplace(HeaderStack.top(), IncludeGraphNode());
+    this->CI = std::make_unique<CompilerInstance>();
+    auto &Clang = *this->CI;
+    Clang.setInvocation(std::make_shared<CompilerInvocation>(CI));
+    Clang.createDiagnostics();
+    Clang.createFileManager();
+    Clang.createTarget();
+    Clang.createSourceManager(Clang.getFileManager());
+    PreprocessOnlyAction Action;
+    Action.BeginSourceFile(Clang, Clang.getFrontendOpts().Inputs[0]);
+    auto &HS = Clang.getPreprocessor().getHeaderSearchInfo();
+    for (auto &FileName :
+         Config::current().Preamble.ParseFunctionBodyHeaderList) {
+      SourceLocation SL;
+      SmallVector<std::pair<const FileEntry *, const DirectoryEntry *>, 1>
+          Includers;
+      auto Result =
+          HS.LookupFile(StringRef(FileName).ltrim("<\"").rtrim(">\""), SL,
+                        StringRef(FileName).starts_with("<"), nullptr, nullptr,
+                        Includers, nullptr, nullptr, nullptr, nullptr, nullptr,
+                        nullptr, true, false, true, false);
+      // log("Preamble: Found entry for `#include {0}`: {1}", FileName,
+      //     Result ? Result->getUID() : -1);
+      if (Result)
+        AllowedHeaders.emplace(Result->getUID());
+    }
+    Clang.getPreprocessor().addPPCallbacks(
+        std::make_unique<FileSwitchCallback>(Clang, *this));
+    auto Err = Action.Execute();
+    Action.EndSourceFile();
+    collectMarkedHeaders();
+  }
+
+  void onEnteringFile(const FileEntry *FE) {
+    if (!FE || FE->getName().empty())
+      return;
+    IncludeGraphNode Node;
+    Node.URI = FE->getName();
+    NodeKeys.emplace_back(std::make_shared<std::string>(
+        llvm::formatv("{0}", FE->getUID()).str()));
+    const auto CurrentKey = StringRef(*NodeKeys.back());
+    IG.try_emplace(CurrentKey, Node);
+    const auto LastNodeKey = HeaderStack.top();
+    const auto LastNode = IG.find(LastNodeKey);
+    // log("Preamble: Collector: {0} -> {1}. '{2}'", LastNodeKey, CurrentKey,
+    //     LastNode->getValue().URI);
+    assert(LastNode != IG.end() && "LastNode should not be end()!");
+    LastNode->getValue().DirectIncludes.emplace_back(CurrentKey);
+    HeaderStack.emplace(CurrentKey);
+  }
+
+  void onLeavingFile(const FileEntry *FE) {
+    if (!FE || FE->getName().empty())
+      return;
+    assert(HeaderStack.size() > 1 && "Stack should not be empty");
+    HeaderStack.pop();
+    // log("Preamble: Collector: leaving {0}", FE->getName());
+  }
+
+  std::set<StringRef> &getMarkedHeaders() { return MarkedHeaders; }
+
+  bool isHeaderMarked(StringRef Path) {
+    return MarkedHeaders.find(Path) != MarkedHeaders.end();
+  }
+
+private:
+
+  void dfs(llvm::StringRef CurrentKey, llvm::StringMap<bool>& VisitFlag) {
+    const auto It = IG.find(CurrentKey);
+    if (It == IG.end())
+      return;
+    if (VisitFlag[CurrentKey])
+      return;
+    VisitFlag[CurrentKey] = true;
+    auto &Value = It->getValue();
+    // log("Premable: visiting {0}: {1}", CurrentKey, Value.URI);
+    MarkedHeaders.emplace(Value.URI);
+    for (auto Next: Value.DirectIncludes)
+      dfs(Next, VisitFlag);
+  }
+
+  void collectMarkedHeaders() {
+    llvm::StringMap<bool> VisitFlag;
+    for (auto Allowed: AllowedHeaders)
+      dfs(llvm::formatv("{0}", Allowed).str(), VisitFlag);
+  }
+
+private:
+  llvm::StringSet<> HeaderMarks;
+  std::unique_ptr<CompilerInstance> CI;
+  llvm::SmallVector<std::shared_ptr<std::string>> NodeKeys;
+  std::stack<std::string> HeaderStack;
+  IncludeGraph IG;
+  std::set<unsigned> AllowedHeaders;
+  std::set<StringRef> MarkedHeaders;
+};
+
 class CppFilePreambleCallbacks : public PreambleCallbacks {
 public:
   CppFilePreambleCallbacks(
       PathRef File, PreambleParsedCallback ParsedCallback,
       PreambleBuildStats *Stats, bool ParseForwardingFunctions,
-      std::function<void(CompilerInstance &)> BeforeExecuteCallback)
-      : File(File), ParsedCallback(ParsedCallback), Stats(Stats),
+      std::function<void(CompilerInstance &)> BeforeExecuteCallback,
+      CppHeaderCollector &HeaderCollector)
+      : File(File), ParsedCallback(ParsedCallback),
+        HeaderCollector(HeaderCollector), Stats(Stats),
         ParseForwardingFunctions(ParseForwardingFunctions),
         BeforeExecuteCallback(std::move(BeforeExecuteCallback)) {}
 
@@ -121,6 +260,7 @@ public:
     CanonIncludes.addSystemHeadersMapping(CI.getLangOpts());
     LangOpts = &CI.getLangOpts();
     SourceMgr = &CI.getSourceManager();
+    StoredCI = &CI;
     Includes.collect(CI);
     if (Config::current().Diagnostics.UnusedIncludes ==
         Config::UnusedIncludesPolicy::Experiment)
@@ -133,9 +273,33 @@ public:
     assert(SourceMgr && LangOpts &&
            "SourceMgr and LangOpts must be set at this point");
 
+    struct FileSwitchCallback : PPCallbacks {
+      CompilerInstance &CI;
+      CppFilePreambleCallbacks &CB;
+
+      FileSwitchCallback(CompilerInstance &CI, CppFilePreambleCallbacks &CB)
+          : CI(CI), CB(CB) {}
+
+      virtual void LexedFileChanged(FileID FID, LexedFileChangeReason Reason,
+                                    SrcMgr::CharacteristicKind FileType,
+                                    FileID PrevFID,
+                                    SourceLocation Loc) override {
+        auto &SM = CI.getSourceManager();
+        const auto File = SM.getFileID(Loc);
+        const auto FE = SM.getFileEntryForID(File);
+        if (Reason == LexedFileChangeReason::EnterFile) {
+          CB.onEnteringFile(FE);
+        } else if (Reason == LexedFileChangeReason::ExitFile) {
+          CB.onLeavingFile(FE);
+        }
+      }
+    };
+
     return std::make_unique<PPChainedCallbacks>(
-        std::make_unique<CollectMainFileMacros>(*SourceMgr, Macros),
-        collectPragmaMarksCallback(*SourceMgr, Marks));
+        std::make_unique<FileSwitchCallback>(*StoredCI, *this),
+        std::make_unique<PPChainedCallbacks>(
+            std::make_unique<CollectMainFileMacros>(*SourceMgr, Macros),
+            collectPragmaMarksCallback(*SourceMgr, Marks)));
   }
 
   CommentHandler *getCommentHandler() override {
@@ -165,6 +329,15 @@ public:
   }
 
   bool shouldSkipFunctionBody(Decl *D) override {
+    if (ParseAllFunctionBodies) {
+#if 0
+      std::string Buffer;
+      llvm::raw_string_ostream RSO(Buffer);
+      D->dump(RSO);
+      log("Preamble: Parse body for Decl: {0}", Buffer);
+#endif
+      return false;
+    }
     // Usually we don't need to look inside the bodies of header functions
     // to understand the program. However when forwarding function like
     // emplace() forward their arguments to some other function, the
@@ -189,6 +362,18 @@ public:
     return true;
   }
 
+  void setParseAllFunctionBodies(bool Flag) { ParseAllFunctionBodies = Flag; }
+
+  void onEnteringFile(const FileEntry *FE) {
+    if (!FE || FE->getName().empty())
+      return;
+    const bool ParseBody = HeaderCollector.isHeaderMarked(FE->getName());
+    // log("Preamble: '{0}' : {1}", FE->getName(), ParseBody);
+    setParseAllFunctionBodies(ParseBody);
+  }
+
+  void onLeavingFile(const FileEntry *FE) {}
+
 private:
   PathRef File;
   PreambleParsedCallback ParsedCallback;
@@ -201,6 +386,9 @@ private:
   std::unique_ptr<CommentHandler> IWYUHandler = nullptr;
   const clang::LangOptions *LangOpts = nullptr;
   const SourceManager *SourceMgr = nullptr;
+  CompilerInstance *StoredCI = nullptr;
+  bool ParseAllFunctionBodies = false;
+  CppHeaderCollector &HeaderCollector;
   PreambleBuildStats *Stats;
   bool ParseForwardingFunctions;
   std::function<void(CompilerInstance &)> BeforeExecuteCallback;
@@ -526,13 +714,6 @@ buildPreamble(PathRef FileName, CompilerInvocation CI,
   // to read back. We rely on dynamic index for the comments instead.
   CI.getPreprocessorOpts().WriteCommentListToPCH = false;
 
-  CppFilePreambleCallbacks CapturedInfo(
-      FileName, PreambleCallback, Stats,
-      Inputs.Opts.PreambleParseForwardingFunctions,
-      [&ASTListeners](CompilerInstance &CI) {
-        for (const auto &L : ASTListeners)
-          L->beforeExecute(CI);
-      });
   auto VFS = Inputs.TFS->view(Inputs.CompileCommand.Directory);
   llvm::SmallString<32> AbsFileName(FileName);
   VFS->makeAbsolute(AbsFileName);
@@ -542,6 +723,17 @@ buildPreamble(PathRef FileName, CompilerInvocation CI,
 
   WallTimer PreambleTimer;
   PreambleTimer.startTimer();
+
+  CppHeaderCollector CHC(CI);
+  CppFilePreambleCallbacks CapturedInfo(
+      FileName, PreambleCallback, Stats,
+      Inputs.Opts.PreambleParseForwardingFunctions,
+      [&ASTListeners](CompilerInstance &CI) {
+        for (const auto &L : ASTListeners)
+          L->beforeExecute(CI);
+      },
+      CHC);
+
   auto BuiltPreamble = PrecompiledPreamble::Build(
       CI, ContentsBuffer.get(), Bounds, *PreambleDiagsEngine,
       Stats ? TimedFS : StatCacheFS, std::make_shared<PCHContainerOperations>(),

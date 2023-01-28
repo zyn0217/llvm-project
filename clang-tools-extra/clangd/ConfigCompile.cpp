@@ -197,6 +197,7 @@ struct FragmentCompiler {
     compile(std::move(F.Hover));
     compile(std::move(F.InlayHints));
     compile(std::move(F.Style));
+    compile(std::move(F.Preamble));
   }
 
   void compile(Fragment::IfBlock &&F) {
@@ -587,6 +588,19 @@ struct FragmentCompiler {
       Out.Apply.push_back([Value(**F.Designators)](const Params &, Config &C) {
         C.InlayHints.Designators = Value;
       });
+  }
+
+  void compile(Fragment::PreambleBlock &&F) {
+    if (F.ParseFunctionBodyHeaderList.empty())
+      return;
+    std::set<std::string> HeadersSpecified;
+    for (auto &Header : F.ParseFunctionBodyHeaderList) {
+      HeadersSpecified.emplace(StringRef(*Header).trim());
+    }
+    Out.Apply.push_back(
+        [Value(std::move(HeadersSpecified))](const Params &, Config &C) {
+          C.Preamble.ParseFunctionBodyHeaderList = std::move(Value);
+        });
   }
 
   constexpr static llvm::SourceMgr::DiagKind Error = llvm::SourceMgr::DK_Error;

@@ -30,6 +30,7 @@
 #include "llvm/ADT/StringSet.h"
 #include <functional>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -146,6 +147,10 @@ struct Config {
     bool DeducedTypes = true;
     bool Designators = true;
   } InlayHints;
+
+  struct {
+    std::set<std::string> ParseFunctionBodyHeaderList;
+  } Preamble;
 };
 
 } // namespace clangd
