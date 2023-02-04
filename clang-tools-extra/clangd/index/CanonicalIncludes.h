@@ -88,6 +88,8 @@ private:
 /// - friend: this is less common than private, has implementation difficulties,
 ///   and affects behavior in a limited scope.
 /// - associated: extremely rare
+/// Note that support for some other IWYU pragmas (export, keep, no_include...)
+/// are implemented in IncludeStructure.
 std::unique_ptr<CommentHandler>
 collectIWYUHeaderMaps(CanonicalIncludes *Includes);
 

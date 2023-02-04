@@ -9,6 +9,7 @@
 #include "Annotations.h"
 #include "Config.h"
 #include "IncludeCleaner.h"
+#include "Protocol.h"
 #include "SourceCode.h"
 #include "TestFS.h"
 #include "TestTU.h"
@@ -22,8 +23,10 @@ namespace clang {
 namespace clangd {
 namespace {
 
+using ::testing::AllOf;
 using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
+using ::testing::Field;
 using ::testing::IsEmpty;
 using ::testing::Pointee;
 using ::testing::UnorderedElementsAre;
@@ -609,6 +612,36 @@ TEST(IncludeCleaner, IWYUPragmaExport) {
   // because we ignore headers with IWYU export pragmas for now.
   EXPECT_THAT(computeUnusedIncludes(AST), IsEmpty());
   EXPECT_THAT(computeUnusedIncludesExperimental(AST), IsEmpty());
+}
+
+MATCHER_P(message, Message, "") { return arg.Message == Message; }
+MATCHER_P2(range, Start, End, "") {
+  return arg.start == Start && arg.end == End;
+}
+
+TEST(IncludeCleaner, IWYUPragmaNoInclude) {
+  TestTU TU;
+  TU.Code = R"cpp(
+#include "foo.h"
+#include "bar.h"
+// IWYU pragma: no_include "bar.h"
+  )cpp";
+  TU.AdditionalFiles["foo.h"] = guard("");
+  TU.AdditionalFiles["bar.h"] = guard("");
+  ParsedAST AST = TU.build();
+
+  auto Diags = issueNoIncludesDiagnostics(AST, TU.Code);
+  EXPECT_THAT(
+      Diags,
+      UnorderedElementsAre(AllOf(
+          message(
+              "included header 'bar.h' is marked as `no_include` at line 4"),
+          Field(&DiagBase::Range, range(Position{2, 0}, Position{2, 16})))));
+  ASSERT_TRUE(Diags.size() == 1);
+  ASSERT_TRUE(Diags.back().Fixes.size() == 1);
+  ASSERT_TRUE(Diags.back().Fixes.back().Edits.size() == 1);
+  EXPECT_THAT(Diags.back().Fixes.back().Edits.back().range,
+              range(Position{2, 0}, Position{3, 0}));
 }
 
 TEST(IncludeCleaner, NoDiagsForObjC) {

@@ -105,6 +105,9 @@ computeUnusedIncludesExperimental(ParsedAST &AST);
 std::vector<Diag> issueUnusedIncludesDiagnostics(ParsedAST &AST,
                                                  llvm::StringRef Code);
 
+std::vector<Diag> issueNoIncludesDiagnostics(ParsedAST &AST,
+                                             llvm::StringRef Code);
+
 /// Affects whether standard library includes should be considered for
 /// removal. This is off by default for now due to implementation limitations:
 /// - macros are not tracked

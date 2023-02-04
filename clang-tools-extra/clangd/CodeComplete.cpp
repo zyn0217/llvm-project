@@ -1556,6 +1556,10 @@ public:
           &Recorder->CCSema->getPreprocessor().getHeaderSearchInfo());
       for (const auto &Inc : Includes.MainFileIncludes)
         Inserter->addExisting(Inc);
+      if (Includes.IwyuNoIncludes) {
+        for (const auto &Inc : *Includes.IwyuNoIncludes)
+          Inserter->addNoInclude(Inc);
+      }
 
       // Most of the cost of file proximity is in initializing the FileDistance
       // structures based on the observed includes, once per query. Conceptually

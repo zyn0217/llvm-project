@@ -147,11 +147,70 @@ public:
       // will know that the next inclusion is behind the IWYU pragma.
       // FIXME: Support "IWYU pragma: begin_exports" and "IWYU pragma:
       // end_exports".
-      if (!Pragma->startswith("export") && !Pragma->startswith("keep"))
-        return false;
       unsigned Offset = SM.getFileOffset(Range.getBegin());
-      LastPragmaKeepInMainFileLine =
+      const unsigned CurrentLine =
           SM.getLineNumber(SM.getMainFileID(), Offset) - 1;
+      if (Pragma->startswith("export") || Pragma->startswith("keep"))
+        LastPragmaKeepInMainFileLine = CurrentLine;
+      else if (Pragma->consume_front("no_include")) {
+        auto Spelling =
+            Pragma->take_until([](char C) { return C == '\n'; }).trim();
+        if (Spelling.empty())
+          return false;
+        const auto SplitQuotedIncludeHeaders = [](llvm::StringRef Buffer) {
+          llvm::SmallVector<llvm::StringRef> Ret;
+          for (size_t Pos = 0, Last = 0; Pos != Buffer.size();) {
+            char Closing = 0;
+            switch (Buffer[Pos]) {
+            case '<':
+              Last = Pos;
+              Closing = '>';
+              break;
+            case '"':
+              Last = Pos++;
+              Closing = '"';
+              break;
+            default:
+              // Ignore non-quoted string
+              ++Pos;
+              continue;
+            }
+            while (Pos != Buffer.size() && Buffer[Pos] != Closing)
+              ++Pos;
+            if (Pos == Buffer.size())
+              break;
+            Ret.emplace_back(Buffer.substr(Last, Pos - Last + 1));
+            ++Pos;
+          }
+          return Ret;
+        };
+        const auto Headers = SplitQuotedIncludeHeaders(Spelling);
+        // Should we support multiple headers on one pragma? Or emit a warning?
+        if (Headers.size() != 1)
+          return false;
+        Spelling = Headers[0];
+        if (const auto Header = Spelling.trim("\"<>"); !Header.empty()) {
+          const auto FE = PP.LookupFile(
+              /*FilenameLoc=*/{}, /*Filename=*/Header,
+              /*isAngled=*/Spelling.starts_with("<"),
+              /*FromDir=*/nullptr, /*FromFile=*/nullptr,
+              /*CurDir=*/nullptr, /*SearchPath=*/nullptr,
+              /*RelativePath=*/nullptr,
+              /*SuggestedModule=*/nullptr, /*IsMapped=*/nullptr,
+              /*IsFrameworkFound=*/nullptr, /*SkipCache=*/false,
+              /*OpenFile=*/false, /*CacheFailures=*/false);
+          if (!FE)
+            return false;
+          auto &NI = Out->IwyuNoIncludes;
+          if (!NI)
+            NI.emplace();
+          NI->insert(IwyuNoInclude(
+              /*Written=*/Spelling.str(),
+              /*Resolved=*/
+              FE->getFileEntry().tryGetRealPathName().str(), CurrentLine));
+        }
+        return false;
+      }
     } else {
       // Memorize headers that have export pragmas in them. Include Cleaner
       // does not support them properly yet, so they will be not marked as
@@ -300,6 +359,12 @@ void IncludeInserter::addExisting(const Inclusion &Inc) {
     IncludedHeaders.insert(Inc.Resolved);
 }
 
+void IncludeInserter::addNoInclude(const IwyuNoInclude &Inc) {
+  IwyuNoIncludeHeaders.insert(Inc.Written);
+  if (!Inc.Resolved.empty())
+    IwyuNoIncludeHeaders.insert(Inc.Resolved);
+}
+
 /// FIXME(ioeric): we might not want to insert an absolute include path if the
 /// path is not shortened.
 bool IncludeInserter::shouldInsertInclude(
@@ -312,7 +377,13 @@ bool IncludeInserter::shouldInsertInclude(
   auto Included = [&](llvm::StringRef Header) {
     return IncludedHeaders.find(Header) != IncludedHeaders.end();
   };
-  return !Included(DeclaringHeader) && !Included(InsertedHeader.File);
+  auto IsIwyuNoInclude = [&](llvm::StringRef Header) {
+    return IwyuNoIncludeHeaders.find(Header) != IwyuNoIncludeHeaders.end();
+  };
+  auto ShouldInsert = [&](auto &Predicate) {
+    return !Predicate(DeclaringHeader) && !Predicate(InsertedHeader.File);
+  };
+  return ShouldInsert(Included) && ShouldInsert(IsIwyuNoInclude);
 }
 
 std::optional<std::string>
@@ -367,6 +438,11 @@ bool operator==(const Inclusion &LHS, const Inclusion &RHS) {
                   LHS.Resolved, LHS.Written) ==
          std::tie(RHS.Directive, RHS.FileKind, RHS.HashOffset, RHS.HashLine,
                   RHS.Resolved, RHS.Written);
+}
+
+bool operator<(const IwyuNoInclude &LHS, const IwyuNoInclude &RHS) {
+  // We want only 1 pragma for the same header.
+  return LHS.Written < RHS.Written;
 }
 
 } // namespace clangd

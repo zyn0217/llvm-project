@@ -576,5 +576,46 @@ std::vector<Diag> issueUnusedIncludesDiagnostics(ParsedAST &AST,
   return Result;
 }
 
+std::vector<Diag> issueNoIncludesDiagnostics(ParsedAST &AST,
+                                             llvm::StringRef Code) {
+  // C/C++ only
+  if (AST.getLangOpts().ObjC)
+    return {};
+  std::vector<Diag> Result;
+  std::string FileName =
+      AST.getSourceManager()
+          .getFileEntryRefForID(AST.getSourceManager().getMainFileID())
+          ->getName()
+          .str();
+  auto &IS = AST.getIncludeStructure();
+  auto &NoIncludes = IS.IwyuNoIncludes;
+  if (!NoIncludes)
+    return Result;
+  for (auto &Inc : IS.MainFileIncludes) {
+    const auto It = NoIncludes->find(
+        IwyuNoInclude(Inc.Written, Inc.Resolved, Inc.HashLine));
+    if (It == NoIncludes->end())
+      continue;
+    Diag D;
+    D.Message = llvm::formatv(
+        "included header '{0}' is marked as `no_include` at line {1}",
+        StringRef(Inc.Written).trim("<>\""), It->HashLine + 1);
+    D.Name = "no-include-headers";
+    D.Source = Diag::DiagSource::Clangd;
+    D.File = FileName;
+    D.Severity = DiagnosticsEngine::Warning;
+    D.Tags.push_back(Unnecessary);
+    D.Range = getDiagnosticRange(Code, Inc.HashOffset);
+    D.Fixes.emplace_back();
+    D.Fixes.back().Message = "remove #include directive";
+    D.Fixes.back().Edits.emplace_back();
+    D.Fixes.back().Edits.back().range.start.line = Inc.HashLine;
+    D.Fixes.back().Edits.back().range.end.line = Inc.HashLine + 1;
+    D.InsideMainFile = true;
+    Result.push_back(std::move(D));
+  }
+  return Result;
+}
+
 } // namespace clangd
 } // namespace clang

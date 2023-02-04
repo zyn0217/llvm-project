@@ -78,6 +78,18 @@ struct Inclusion {
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const Inclusion &);
 bool operator==(const Inclusion &LHS, const Inclusion &RHS);
 
+struct IwyuNoInclude {
+  std::string
+      Written;   // For `IWYU pragma no_include <vector>`, it is `<vector>`.
+  Path Resolved; // Resolved path to written file.
+  int HashLine;  // 0-based line number containing IWYU pragma
+  IwyuNoInclude() = default;
+  IwyuNoInclude(std::string Written, Path Resolved, int HashLine)
+      : Written(std::move(Written)), Resolved(std::move(Resolved)),
+        HashLine(HashLine) {}
+  friend bool operator<(const IwyuNoInclude &LHS, const IwyuNoInclude &RHS);
+};
+
 // Contains information about one file in the build graph and its direct
 // dependencies. Doesn't own the strings it references (IncludeGraph is
 // self-contained).
@@ -176,6 +188,8 @@ public:
       StdlibHeaders;
 
   std::vector<Inclusion> MainFileIncludes;
+  std::optional<std::set<IwyuNoInclude>>
+      IwyuNoIncludes; // IWYU pragma: no_include
 
   // We reserve HeaderID(0) for the main file and will manually check for that
   // in getID and getOrCreateID because the UniqueID is not stable when the
@@ -219,6 +233,8 @@ public:
 
   void addExisting(const Inclusion &Inc);
 
+  void addNoInclude(const IwyuNoInclude &Inc);
+
   /// Checks whether to add an #include of the header into \p File.
   /// An #include will not be added if:
   ///   - Either \p DeclaringHeader or \p InsertedHeader is already (directly)
@@ -258,7 +274,9 @@ private:
   StringRef BuildDir;
   HeaderSearch *HeaderSearchInfo = nullptr;
   llvm::StringSet<> IncludedHeaders; // Both written and resolved.
-  tooling::HeaderIncludes Inserter;  // Computers insertion replacement.
+  llvm::StringSet<> IwyuNoIncludeHeaders; // Iwyu: no_include headers, with
+                                          // written and resolved.
+  tooling::HeaderIncludes Inserter;       // Computers insertion replacement.
 };
 
 } // namespace clangd

@@ -93,7 +93,8 @@ protected:
   // Calculates the include path, or returns "" on error or header should not be
   // inserted.
   std::string calculate(PathRef Original, PathRef Preferred = "",
-                        const std::vector<Inclusion> &Inclusions = {}) {
+                        const std::vector<Inclusion> &Inclusions = {},
+                        const std::vector<IwyuNoInclude> &IwyuNoIncludes = {}) {
     Clang = setupClang();
     PreprocessOnlyAction Action;
     EXPECT_TRUE(
@@ -111,6 +112,8 @@ protected:
                              &Clang->getPreprocessor().getHeaderSearchInfo());
     for (const auto &Inc : Inclusions)
       Inserter.addExisting(Inc);
+    for (const auto &Inc : IwyuNoIncludes)
+      Inserter.addNoInclude(Inc);
     auto Inserted = ToHeaderFile(Preferred);
     if (!Inserter.shouldInsertInclude(Original, Inserted))
       return "";
@@ -273,6 +276,47 @@ TEST_F(HeadersTest, IWYUPragmaKeep) {
       collectIncludes().MainFileIncludes,
       UnorderedElementsAre(AllOf(written("\"foo.h\""), hasPragmaKeep(false)),
                            AllOf(written("\"bar.h\""), hasPragmaKeep(true))));
+}
+
+TEST_F(HeadersTest, IWYUPragmaNoInclude) {
+  FS.Files[MainFile] = R"cpp(
+    // IWYU pragma: no_include "baz.h"
+    #include "foo.h"
+    // IWYU pragma: no_include <bar.h>
+    // IWYU pragma: no_include <multiple> "headers.hpp" are not <valid>
+    // IWYU pragma: no_include <multiple> "headers.hpp" <invalid>
+    // IWYU pragma: no_include "multiple" <headers.hpp> "invalid"
+    // IWYU pragma: no_include no_quotes are considered invalid
+    // IWYU pragma: no_include <valid> texts after are ignored
+    // IWYU pragma: no_include not starting with quotes <are> "ignored"
+  )cpp";
+  FS.Files["sub/foo.h"] = "";
+  FS.Files["sub/bar.h"] = "";
+  FS.Files["sub/baz.h"] = "";
+  FS.Files["sub/valid"] = "";
+  FS.Files["sub/invalid"] = "";
+  FS.Files["sub/multiple"] = "";
+  FS.Files["sub/are"] = "";
+  FS.Files["sub/ignored"] = "";
+  FS.Files["sub/headers.hpp"] = "";
+
+  auto NI = collectIncludes().IwyuNoIncludes;
+  ASSERT_TRUE(NI);
+  EXPECT_THAT(*NI,
+              UnorderedElementsAre(
+                  AllOf(written("\"baz.h\""),
+                        resolved("/clangd-test/sub/baz.h"), includeLine(1)),
+                  AllOf(written("<bar.h>"), resolved("/clangd-test/sub/bar.h"),
+                        includeLine(3)),
+                  AllOf(written("<valid>"), resolved("/clangd-test/sub/valid"),
+                        includeLine(8))));
+  IwyuNoInclude Inc;
+  Inc.Written = "\"baz.h\"";
+  EXPECT_THAT(calculate("\"baz.h\"", "", {}, {Inc}), "");
+  Inc.Written = "<bar.h>";
+  EXPECT_THAT(calculate("<bar.h>", "", {}, {Inc}), "");
+  Inc.Written = "<valid>";
+  EXPECT_THAT(calculate("<valid>", "", {}, {Inc}), "");
 }
 
 TEST_F(HeadersTest, InsertInclude) {
