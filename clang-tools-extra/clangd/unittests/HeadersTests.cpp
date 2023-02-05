@@ -302,14 +302,13 @@ TEST_F(HeadersTest, IWYUPragmaNoInclude) {
 
   auto NI = collectIncludes().IwyuNoIncludes;
   ASSERT_TRUE(NI);
-  EXPECT_THAT(*NI,
-              UnorderedElementsAre(
-                  AllOf(written("\"baz.h\""),
-                        resolved("/clangd-test/sub/baz.h"), includeLine(1)),
-                  AllOf(written("<bar.h>"), resolved("/clangd-test/sub/bar.h"),
-                        includeLine(3)),
-                  AllOf(written("<valid>"), resolved("/clangd-test/sub/valid"),
-                        includeLine(8))));
+  EXPECT_THAT(*NI, UnorderedElementsAre(
+                       AllOf(written("\"baz.h\""),
+                             resolved(testPath("sub/baz.h")), includeLine(1)),
+                       AllOf(written("<bar.h>"),
+                             resolved(testPath("sub/bar.h")), includeLine(3)),
+                       AllOf(written("<valid>"),
+                             resolved(testPath("sub/valid")), includeLine(8))));
   IwyuNoInclude Inc;
   Inc.Written = "\"baz.h\"";
   EXPECT_THAT(calculate("\"baz.h\"", "", {}, {Inc}), "");
