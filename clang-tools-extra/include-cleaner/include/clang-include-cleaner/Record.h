@@ -18,6 +18,7 @@
 #define CLANG_INCLUDE_CLEANER_RECORD_H
 
 #include "clang-include-cleaner/Types.h"
+#include "clang/Lex/Preprocessor.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -25,6 +26,7 @@
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/FileSystem/UniqueID.h"
 #include <memory>
+#include <set>
 #include <vector>
 
 namespace clang {
@@ -38,6 +40,21 @@ class PPCallbacks;
 class FileManager;
 
 namespace include_cleaner {
+
+struct IwyuNoInclude {
+  std::string
+      Written; // For `IWYU pragma no_include <vector>`, it is `<vector>`.
+  std::string Resolved; // Resolved path to written file.
+  int HashLine;         // 0-based line number containing IWYU pragma
+  IwyuNoInclude() = default;
+  IwyuNoInclude(std::string Written, std::string Resolved, int HashLine)
+      : Written(std::move(Written)), Resolved(std::move(Resolved)),
+        HashLine(HashLine) {}
+  friend bool operator<(const IwyuNoInclude &LHS, const IwyuNoInclude &RHS) {
+    // We want only 1 pragma for the same written header.
+    return LHS.Written < RHS.Written;
+  }
+};
 
 /// Captures #include mapping information. It analyses IWYU Pragma comments and
 /// other use-instead-like mechanisms (#pragma include_instead) on included
@@ -141,6 +158,18 @@ struct RecordedPP {
 
   /// The include directives seen in the main file.
   include_cleaner::Includes Includes;
+};
+
+/// Collects IWYU no_include directives. We don't put the parse logic in
+/// \class PragmaIncludes because the directive could be scattered throughout
+/// the source rather than being limited in preamble bounds.
+struct RecordedNoIncludes {
+  /// The callback (when installed into clang) tracks no_includes pragma in
+  /// this.
+  void record(const CompilerInstance &Clang);
+
+  /// no_include directives.
+  std::set<IwyuNoInclude> IwyuNoIncludes;
 };
 
 } // namespace include_cleaner

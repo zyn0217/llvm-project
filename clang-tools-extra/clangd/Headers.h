@@ -11,6 +11,7 @@
 
 #include "Protocol.h"
 #include "SourceCode.h"
+#include "clang-include-cleaner/Record.h"
 #include "index/Symbol.h"
 #include "support/Path.h"
 #include "clang/Basic/FileEntry.h"
@@ -184,6 +185,8 @@ public:
 
   class RecordHeaders;
 
+  include_cleaner::RecordedNoIncludes RecordedNoIncludes;
+
 private:
   // MainFileEntry will be used to check if the queried file is the main file
   // or not.
@@ -218,6 +221,8 @@ public:
         Inserter(FileName, Code, Style.IncludeStyle) {}
 
   void addExisting(const Inclusion &Inc);
+
+  void addNoInclude(const include_cleaner::IwyuNoInclude &Inc);
 
   /// Checks whether to add an #include of the header into \p File.
   /// An #include will not be added if:
@@ -258,7 +263,9 @@ private:
   StringRef BuildDir;
   HeaderSearch *HeaderSearchInfo = nullptr;
   llvm::StringSet<> IncludedHeaders; // Both written and resolved.
-  tooling::HeaderIncludes Inserter;  // Computers insertion replacement.
+  llvm::StringSet<> IwyuNoIncludeHeaders; // Iwyu: no_include headers, with
+                                          // written and resolved.
+  tooling::HeaderIncludes Inserter;       // Computers insertion replacement.
 };
 
 } // namespace clangd

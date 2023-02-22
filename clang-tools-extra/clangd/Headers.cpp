@@ -9,6 +9,7 @@
 #include "Headers.h"
 #include "Preamble.h"
 #include "SourceCode.h"
+#include "clang-include-cleaner/Record.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -233,6 +234,7 @@ void IncludeStructure::collect(const CompilerInstance &CI) {
   auto Collector = std::make_unique<RecordHeaders>(CI, this);
   CI.getPreprocessor().addCommentHandler(Collector.get());
   CI.getPreprocessor().addPPCallbacks(std::move(Collector));
+  RecordedNoIncludes.record(CI);
 }
 
 std::optional<IncludeStructure::HeaderID>
@@ -300,6 +302,12 @@ void IncludeInserter::addExisting(const Inclusion &Inc) {
     IncludedHeaders.insert(Inc.Resolved);
 }
 
+void IncludeInserter::addNoInclude(const include_cleaner::IwyuNoInclude &Inc) {
+  IwyuNoIncludeHeaders.insert(Inc.Written);
+  if (!Inc.Resolved.empty())
+    IwyuNoIncludeHeaders.insert(Inc.Resolved);
+}
+
 /// FIXME(ioeric): we might not want to insert an absolute include path if the
 /// path is not shortened.
 bool IncludeInserter::shouldInsertInclude(
@@ -312,7 +320,13 @@ bool IncludeInserter::shouldInsertInclude(
   auto Included = [&](llvm::StringRef Header) {
     return IncludedHeaders.find(Header) != IncludedHeaders.end();
   };
-  return !Included(DeclaringHeader) && !Included(InsertedHeader.File);
+  auto IsIwyuNoInclude = [&](llvm::StringRef Header) {
+    return IwyuNoIncludeHeaders.find(Header) != IwyuNoIncludeHeaders.end();
+  };
+  auto ShouldInsert = [&](auto &Predicate) {
+    return !Predicate(DeclaringHeader) && !Predicate(InsertedHeader.File);
+  };
+  return ShouldInsert(Included) && ShouldInsert(IsIwyuNoInclude);
 }
 
 std::optional<std::string>

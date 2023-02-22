@@ -878,6 +878,26 @@ TEST(CompletionTest, NoIncludeInsertionWhenDeclFoundInFile) {
                           AllOf(named("Y"), Not(insertInclude()))));
 }
 
+TEST(CompletionTest, NoIncludeInsertionIfSpecifiedInNoIncludePragma) {
+  Symbol SymX = cls("ns::X");
+  std::string BarHeader = testPath("sub/bar");
+  auto BarURI = URI::create(BarHeader).toString();
+  SymX.CanonicalDeclaration.FileURI = BarURI.c_str();
+  SymX.IncludeHeaders.emplace_back("<bar>", 1, Symbol::Include);
+  TestTU TU;
+  TU.Code = R"cpp(
+          // IWYU pragma: no_include <bar>
+          namespace ns {}
+          int main() { ns::^ }
+      )cpp";
+  TU.AdditionalFiles["sub/bar"] = "";
+  Annotations Test(TU.Code);
+  TU.ExtraArgs.emplace_back("-I" + testPath("sub"));
+  auto Results = completions(TU, Test.point(), {SymX});
+  EXPECT_THAT(Results.Completions,
+              ElementsAre(AllOf(named("X"), Not(insertInclude()))));
+}
+
 TEST(CompletionTest, IndexSuppressesPreambleCompletions) {
   Annotations Test(R"cpp(
       #include "bar.h"

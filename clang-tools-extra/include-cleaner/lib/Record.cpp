@@ -423,4 +423,91 @@ std::unique_ptr<PPCallbacks> RecordedPP::record(const Preprocessor &PP) {
   return std::make_unique<PPRecorder>(*this, PP);
 }
 
+void RecordedNoIncludes::record(const CompilerInstance &Clang) {
+  // Derived from PPCallbacks as we want to make Clang take the ownership of
+  // collector.
+  class NoIncludePragmaCollector : public CommentHandler, public PPCallbacks {
+  public:
+    NoIncludePragmaCollector(const CompilerInstance &Clang,
+                             RecordedNoIncludes &Out)
+        : SM(Clang.getSourceManager()), Out(Out) {}
+    bool HandleComment(Preprocessor &PP, SourceRange Range) override {
+      bool InMainFile = SM.isInMainFile(Range.getBegin());
+      auto Pragma =
+          tooling::parseIWYUPragma(SM.getCharacterData(Range.getBegin()));
+      if (!Pragma)
+        return false;
+
+      // Record no_include pragma. We only care about main files.
+      if (InMainFile && Pragma->consume_front("no_include")) {
+        auto Spelling =
+            Pragma->take_until([](char C) { return C == '\n'; }).trim();
+        if (Spelling.empty())
+          return false;
+        const auto SplitQuotedIncludeHeaders = [](llvm::StringRef Buffer) {
+          llvm::SmallVector<llvm::StringRef> Ret;
+          for (size_t Pos = 0, Last = 0; Pos != Buffer.size();) {
+            char Closing = 0;
+            switch (Buffer[Pos]) {
+            case '<':
+              Last = Pos;
+              Closing = '>';
+              break;
+            case '"':
+              Last = Pos++;
+              Closing = '"';
+              break;
+            default:
+              // Ignore non-quoted string
+              ++Pos;
+              continue;
+            }
+            while (Pos != Buffer.size() && Buffer[Pos] != Closing)
+              ++Pos;
+            if (Pos == Buffer.size())
+              break;
+            Ret.emplace_back(Buffer.substr(Last, Pos - Last + 1));
+            ++Pos;
+          }
+          return Ret;
+        };
+        const auto Headers = SplitQuotedIncludeHeaders(Spelling);
+        // Should we support multiple headers on one pragma? Or emit a warning?
+        if (Headers.size() != 1)
+          return false;
+        Spelling = Headers[0];
+        unsigned Offset = SM.getFileOffset(Range.getBegin());
+        unsigned CurrentLine =
+            SM.getLineNumber(SM.getMainFileID(), Offset) - 1; // 0-based.
+        if (const auto Header = Spelling.trim("\"<>"); !Header.empty()) {
+          const auto FE = PP.LookupFile(
+              /*FilenameLoc=*/{}, /*Filename=*/Header,
+              /*isAngled=*/Spelling.starts_with("<"),
+              /*FromDir=*/nullptr, /*FromFile=*/nullptr,
+              /*CurDir=*/nullptr, /*SearchPath=*/nullptr,
+              /*RelativePath=*/nullptr,
+              /*SuggestedModule=*/nullptr, /*IsMapped=*/nullptr,
+              /*IsFrameworkFound=*/nullptr, /*SkipCache=*/false,
+              /*OpenFile=*/false, /*CacheFailures=*/false);
+          if (!FE)
+            return false;
+          Out.IwyuNoIncludes.insert(IwyuNoInclude(
+              /*Written=*/Spelling.str(),
+              /*Resolved=*/
+              FE->getFileEntry().tryGetRealPathName().str(), CurrentLine));
+        }
+        return false;
+      }
+      return false;
+    }
+
+  private:
+    SourceManager &SM;
+    RecordedNoIncludes &Out;
+  };
+  auto Handler = std::make_unique<NoIncludePragmaCollector>(Clang, *this);
+  Clang.getPreprocessor().addCommentHandler(Handler.get());
+  Clang.getPreprocessor().addPPCallbacks(std::move(Handler));
+}
+
 } // namespace clang::include_cleaner

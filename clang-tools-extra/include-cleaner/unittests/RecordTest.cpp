@@ -20,8 +20,10 @@
 
 namespace clang::include_cleaner {
 namespace {
+using testing::AllOf;
 using testing::ElementsAreArray;
 using testing::IsEmpty;
+using testing::UnorderedElementsAre;
 
 // Matches a Decl* if it is a NamedDecl with the given name.
 MATCHER_P(named, N, "") {
@@ -284,19 +286,23 @@ protected:
   // We don't build an AST, we just run a preprocessor action!
   TestInputs Inputs;
   PragmaIncludes PI;
+  RecordedNoIncludes NI;
 
   PragmaIncludeTest() {
     Inputs.MakeAction = [this] {
       struct Hook : public PreprocessOnlyAction {
       public:
-        Hook(PragmaIncludes *Out) : Out(Out) {}
+        Hook(PragmaIncludes *Out, RecordedNoIncludes *NoInc)
+            : Out(Out), NoInc(NoInc) {}
         bool BeginSourceFileAction(clang::CompilerInstance &CI) override {
           Out->record(CI);
+          NoInc->record(CI);
           return true;
         }
         PragmaIncludes *Out;
+        RecordedNoIncludes *NoInc;
       };
-      return std::make_unique<Hook>(&PI);
+      return std::make_unique<Hook>(&PI, &NI);
     };
   }
 
@@ -484,6 +490,40 @@ TEST_F(PragmaIncludeTest, IWYUExportBlock) {
 
   EXPECT_TRUE(PI.getExporters(FM.getFile("foo.h").get(), FM).empty());
   EXPECT_TRUE(PI.getExporters(FM.getFile("bar.h").get(), FM).empty());
+}
+
+MATCHER_P(written, Name, "") { return arg.Written == Name; }
+MATCHER_P(includeLine, N, "") { return arg.HashLine == N; }
+MATCHER_P(resolved, Name, "") { return arg.Resolved == Name; }
+
+TEST_F(PragmaIncludeTest, IWYUNoInclude) {
+  Inputs.Code = R"cpp(
+    // IWYU pragma: no_include "baz.h"
+    #include "external.h"
+    #include "foo.h"
+    // IWYU pragma: no_include <bar.h>
+    // IWYU pragma: no_include <multiple> "headers.hpp" are not <valid>
+    // IWYU pragma: no_include <multiple> "headers.hpp" <invalid>
+    // IWYU pragma: no_include "multiple" <headers.hpp> "invalid"
+    // IWYU pragma: no_include no_quotes are considered invalid
+    // IWYU pragma: no_include <valid> texts after are ignored
+    // IWYU pragma: no_include not starting with quotes <are> "ignored"
+  )cpp";
+  Inputs.ExtraFiles["external.h"] = R"cpp(
+    #pragma once
+    // IWYU pragma: no_include <headers.hpp>
+  )cpp";
+  Inputs.ExtraArgs.emplace_back("-I.");
+  createEmptyFiles({"foo.h", "bar.h", "baz.h", "valid", "invalid", "multiple",
+                    "are", "ignored", "headers.hpp"});
+  TestAST Processed = build();
+  auto &NoIncludes = NI.IwyuNoIncludes;
+  EXPECT_THAT(
+      NoIncludes,
+      UnorderedElementsAre(
+          AllOf(written("\"baz.h\""), resolved("baz.h"), includeLine(1)),
+          AllOf(written("<bar.h>"), resolved("bar.h"), includeLine(4)),
+          AllOf(written("<valid>"), resolved("valid"), includeLine(9))));
 }
 
 TEST_F(PragmaIncludeTest, SelfContained) {
