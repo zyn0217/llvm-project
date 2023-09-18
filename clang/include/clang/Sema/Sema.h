@@ -9138,7 +9138,7 @@ public:
     /// a dependent parameter type did not match the corresponding element
     /// of the corresponding argument (when deducing from an initializer list).
     TDK_DeducedMismatchNested,
-    /// A non-depnedent component of the parameter did not match the
+    /// A non-dependent component of the parameter did not match the
     /// corresponding component of the argument.
     TDK_NonDeducedMismatch,
     /// When performing template argument deduction for a function
@@ -9231,6 +9231,12 @@ public:
                           FunctionDecl *&Specialization,
                           sema::TemplateDeductionInfo &Info,
                           bool IsAddressOfFunction = false);
+
+  static Sema::TemplateDeductionResult DeduceTemplateArgumentsByTypeMatch(
+      Sema &S, TemplateParameterList *TemplateParams, QualType P, QualType A,
+      sema::TemplateDeductionInfo &Info,
+      SmallVectorImpl<DeducedTemplateArgument> &Deduced, unsigned TDF,
+      bool PartialOrdering = false, bool DeducedFromArrayBound = false);
 
   /// Substitute Replacement for \p auto in \p TypeWithAuto
   QualType SubstAutoType(QualType TypeWithAuto, QualType Replacement);

@@ -41,6 +41,7 @@
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaInternal.h"
+// #include "clang/Sema/Template.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallBitVector.h"
@@ -1462,6 +1463,38 @@ void ResultBuilder::AddResult(Result R, DeclContext *CurContext,
         }
         OverloadSet.Add(Method, Results.size());
       }
+
+#if 0
+  const FunctionTemplateDecl *FTD = nullptr;
+  FTD = dyn_cast<FunctionTemplateDecl>(R.Declaration);
+  llvm::errs() << "SCC 0: " << (void *)FTD << " " << PreferredType.isNull()
+               << "\n";
+  if (FTD && PreferredType) {
+    auto Pointee = PreferredType->getTypePtr()->getPointeeType();
+    llvm::errs() << "SCC 1\n";
+    if (!Pointee.isNull()) {
+      llvm::errs() << "SCC 2\n";
+      if (const auto *FT = Pointee->getAs<FunctionType>()) {
+        llvm::errs() << "SCC 3\n";
+        sema::TemplateDeductionInfo Info(SourceLocation{});
+        llvm::SmallVector<DeducedTemplateArgument> Deduced;
+        Deduced.resize(FTD->getTemplateParameters()->size());
+        FT->dump();
+        if (auto Result = Sema::DeduceTemplateArgumentsByTypeMatch(
+                SemaRef, FTD->getTemplateParameters(),
+                FTD->getTemplatedDecl()->getType(),
+                FT->getCanonicalTypeInternal(), Info, Deduced, 48)) {
+          llvm::errs() << FTD->getNameAsString()
+                       << " could not be deduced from enclosing type: "
+                       << Result << "\n";
+        } else
+          llvm::errs() << FTD->getNameAsString()
+                       << " could be deduced from enclosing type"
+                       << "\n";
+      }
+    }
+  }
+#endif
 
   R.FunctionCanBeCall = canFunctionBeCalled(R.getDeclaration(), BaseExprType);
 
