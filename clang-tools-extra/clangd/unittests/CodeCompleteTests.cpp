@@ -1434,6 +1434,24 @@ TEST(SignatureHelpTest, Overloads) {
   EXPECT_EQ(0, Results.activeParameter);
 }
 
+TEST(SignatureHelpTest, MemberDefinition) {
+  std::string Snippet = R"cpp(
+    struct S {
+      S(int x) : x(x) {}
+      int x;
+    };
+    struct Foo {
+      S bar(const char* ptr);
+      S bar(int, double);
+      S bar();
+    };
+  )cpp";
+  EXPECT_THAT(signatures(Snippet + "S Foo::bar(^)").signatures,
+              ElementsAre(sig("bar([[const char *ptr]]) -> S")));
+  EXPECT_THAT(signatures(Snippet + "S constructor(^)").signatures,
+              Contains(sig("S([[int x]])")));
+}
+
 TEST(SignatureHelpTest, FunctionPointers) {
   llvm::StringLiteral Tests[] = {
       // Variable of function pointer type

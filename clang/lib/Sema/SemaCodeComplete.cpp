@@ -41,6 +41,7 @@
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaInternal.h"
+#include "clang/Sema/Template.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallBitVector.h"
@@ -326,6 +327,11 @@ public:
   /// if any.
   bool canCxxMethodBeCalled(const CXXMethodDecl *Method,
                             QualType BaseExprType) const;
+
+  /// Decide whether or not the template parameters in \param FuncTmpl could be
+  /// deduced from PreferredType.
+  bool deducibleFromAddressOfFunctionTemplate(
+      const FunctionTemplateDecl *FuncTmpl) const;
 
   /// Check whether the result is hidden by the Hiding declaration.
   ///
@@ -1342,6 +1348,37 @@ bool ResultBuilder::canFunctionBeCalled(const NamedDecl *ND,
   return true;
 }
 
+bool ResultBuilder::deducibleFromAddressOfFunctionTemplate(
+    const FunctionTemplateDecl *FuncTmpl) const {
+  if (!FuncTmpl)
+    return false;
+
+  if (auto Kind = CompletionContext.getKind();
+      Kind != CodeCompletionContext::CCC_Expression &&
+      Kind != CodeCompletionContext::CCC_ParenthesizedExpression)
+    return false;
+
+  if (!PreferredType)
+    return false;
+
+  auto *MaybeFunctionType = PreferredType.getTypePtr();
+  // If we're declaring a reference of a function type, Pointee is null.
+  if (auto Pointee = MaybeFunctionType->getPointeeType(); !Pointee.isNull())
+    MaybeFunctionType = Pointee.getTypePtr();
+
+  // We don't need any location info.
+  sema::TemplateDeductionInfo Info{SourceLocation{}};
+  // ... nor the deduced types.
+  SmallVector<DeducedTemplateArgument> Deduced;
+
+  auto Result = Sema::DeduceTemplateArgumentsByTypeMatch(
+      SemaRef, FuncTmpl->getTemplateParameters(),
+      /*P=*/FuncTmpl->getTemplatedDecl()->getType(),
+      /*A=*/MaybeFunctionType->getCanonicalTypeInternal(), Info, Deduced,
+      /*TDF=*/48);
+  return Result == Sema::TemplateDeductionResult::TDK_Success;
+}
+
 void ResultBuilder::AddResult(Result R, DeclContext *CurContext,
                               NamedDecl *Hiding, bool InBaseClass = false,
                               QualType BaseExprType = QualType()) {
@@ -1464,6 +1501,9 @@ void ResultBuilder::AddResult(Result R, DeclContext *CurContext,
       }
 
   R.FunctionCanBeCall = canFunctionBeCalled(R.getDeclaration(), BaseExprType);
+  R.DeducibleFromAddressOfFunctionTemplate =
+      deducibleFromAddressOfFunctionTemplate(
+          dyn_cast<FunctionTemplateDecl>(R.getDeclaration()));
 
   // Insert this result into the set of results.
   Results.push_back(R);
@@ -3622,14 +3662,8 @@ CodeCompletionString *CodeCompletionResult::createCodeCompletionStringForDecl(
       // function call, so we introduce an explicit template argument list
       // containing all of the arguments up to the first deducible argument.
       //
-      // Or, if this isn't a call, emit all the template arguments
-      // to disambiguate the (potential) overloads.
-      //
-      // FIXME: Detect cases where the function parameters can be deduced from
-      // the surrounding context, as per [temp.deduct.funcaddr].
-      // e.g.,
-      // template <class T> void foo(T);
-      // void (*f)(int) = foo;
+      // Or, if this isn't a call, emit non-default template arguments to
+      // disambiguate the (potential) overloads.
       Result.AddChunk(CodeCompletionString::CK_LeftAngle);
       AddTemplateParameterChunks(Ctx, Policy, FunTmpl, Result,
                                  LastDeducibleArgument);
@@ -6126,6 +6160,26 @@ ProduceSignatureHelp(Sema &SemaRef, MutableArrayRef<ResultCandidate> Candidates,
         SemaRef, CurrentArg, Candidates.data(), Candidates.size(), OpenParLoc,
         Braced);
   return getParamType(SemaRef, Candidates, CurrentArg);
+}
+
+QualType Sema::ProduceMemberSignatureHelp(const CXXRecordDecl *RD,
+                                          DeclarationName MemberName,
+                                          ArrayRef<Expr *> Args,
+                                          SourceLocation OpenParLoc) {
+  if (!RD || !RD->isCompleteDefinition())
+    return QualType();
+  auto Result = RD->lookup(MemberName);
+  if (Result.empty())
+    return QualType();
+  SmallVector<ResultCandidate> RC;
+  for (auto *Candidate : Result) {
+    if (auto *FuncDecl = dyn_cast<FunctionDecl>(Candidate))
+      RC.emplace_back(FuncDecl);
+    else if (auto *FuncTmpl = dyn_cast<FunctionTemplateDecl>(Candidate))
+      RC.emplace_back(FuncTmpl);
+  }
+  return ProduceSignatureHelp(*this, RC, Args.size(), OpenParLoc,
+                              /*Braced=*/false);
 }
 
 // Given a callee expression `Fn`, if the call is through a function pointer,

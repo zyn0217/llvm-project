@@ -2239,6 +2239,16 @@ static Sema::TemplateDeductionResult DeduceTemplateArgumentsByTypeMatch(
   llvm_unreachable("Invalid Type Class!");
 }
 
+Sema::TemplateDeductionResult Sema::DeduceTemplateArgumentsByTypeMatch(
+    Sema &S, TemplateParameterList *TemplateParams, QualType P, QualType A,
+    sema::TemplateDeductionInfo &Info,
+    SmallVectorImpl<DeducedTemplateArgument> &Deduced, unsigned TDF,
+    bool PartialOrdering, bool DeducedFromArrayBound) {
+  return ::DeduceTemplateArgumentsByTypeMatch(S, TemplateParams, P, A, Info,
+                                              Deduced, TDF, PartialOrdering,
+                                              DeducedFromArrayBound);
+}
+
 static Sema::TemplateDeductionResult
 DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
                         const TemplateArgument &P, TemplateArgument A,

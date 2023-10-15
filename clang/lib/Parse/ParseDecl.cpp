@@ -2641,11 +2641,31 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
     InitializerScopeRAII InitScope(*this, D, ThisDecl);
 
     auto ThisVarDecl = dyn_cast_or_null<VarDecl>(ThisDecl);
+    bool MaybeMemberFunction = [&] {
+      if (!ThisVarDecl)
+        return false;
+      auto &Scope = D.getCXXScopeSpec();
+      if (Scope.isEmpty())
+        return false;
+      auto *CurrentDecl = Scope.getScopeRep()->getAsRecordDecl();
+      if (!CurrentDecl)
+        return false;
+      return !D.getName().isInvalid();
+    }();
     auto RunSignatureHelp = [&]() {
-      QualType PreferredType = Actions.ProduceConstructorSignatureHelp(
-          ThisVarDecl->getType()->getCanonicalTypeInternal(),
-          ThisDecl->getLocation(), Exprs, T.getOpenLocation(),
-          /*Braced=*/false);
+      QualType PreferredType;
+      if (!MaybeMemberFunction) {
+        PreferredType = Actions.ProduceConstructorSignatureHelp(
+            ThisVarDecl->getType()->getCanonicalTypeInternal(),
+            ThisDecl->getLocation(), Exprs, T.getOpenLocation(),
+            /*Braced=*/false);
+      } else {
+        if (auto *II = D.getIdentifier()) {
+          PreferredType = Actions.ProduceMemberSignatureHelp(
+              D.getCXXScopeSpec().getScopeRep()->getAsRecordDecl(), II, Exprs,
+              T.getOpenLocation());
+        }
+      }
       CalledSignatureHelp = true;
       return PreferredType;
     };

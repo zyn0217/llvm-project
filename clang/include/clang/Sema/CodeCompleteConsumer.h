@@ -863,6 +863,11 @@ public:
   /// be a call.
   bool FunctionCanBeCall : 1;
 
+  /// When taking the address of a function template, whether its template
+  /// arguments could be deduced from its surrounding context, e.g., the type
+  /// specified.
+  bool DeducibleFromAddressOfFunctionTemplate : 1;
+
   /// If the result should have a nested-name-specifier, this is it.
   /// When \c QualifierIsInformative, the nested-name-specifier is
   /// informative rather than required.
@@ -889,7 +894,8 @@ public:
         FixIts(std::move(FixIts)), Hidden(false), InBaseClass(false),
         QualifierIsInformative(QualifierIsInformative),
         StartsNestedNameSpecifier(false), AllParametersAreInformative(false),
-        DeclaringEntity(false), FunctionCanBeCall(true), Qualifier(Qualifier) {
+        DeclaringEntity(false), FunctionCanBeCall(true),
+        DeducibleFromAddressOfFunctionTemplate(false), Qualifier(Qualifier) {
     // FIXME: Add assert to check FixIts range requirements.
     computeCursorKindAndAvailability(Accessible);
   }
@@ -900,7 +906,8 @@ public:
         CursorKind(CXCursor_NotImplemented), Hidden(false), InBaseClass(false),
         QualifierIsInformative(false), StartsNestedNameSpecifier(false),
         AllParametersAreInformative(false), DeclaringEntity(false),
-        FunctionCanBeCall(true) {}
+        FunctionCanBeCall(true), DeducibleFromAddressOfFunctionTemplate(false) {
+  }
 
   /// Build a result that refers to a macro.
   CodeCompletionResult(const IdentifierInfo *Macro,
@@ -910,7 +917,8 @@ public:
         CursorKind(CXCursor_MacroDefinition), Hidden(false), InBaseClass(false),
         QualifierIsInformative(false), StartsNestedNameSpecifier(false),
         AllParametersAreInformative(false), DeclaringEntity(false),
-        FunctionCanBeCall(true), MacroDefInfo(MI) {}
+        FunctionCanBeCall(true), DeducibleFromAddressOfFunctionTemplate(false),
+        MacroDefInfo(MI) {}
 
   /// Build a result that refers to a pattern.
   CodeCompletionResult(
@@ -922,7 +930,8 @@ public:
         CursorKind(CursorKind), Availability(Availability), Hidden(false),
         InBaseClass(false), QualifierIsInformative(false),
         StartsNestedNameSpecifier(false), AllParametersAreInformative(false),
-        DeclaringEntity(false), FunctionCanBeCall(true) {}
+        DeclaringEntity(false), FunctionCanBeCall(true),
+        DeducibleFromAddressOfFunctionTemplate(false) {}
 
   /// Build a result that refers to a pattern with an associated
   /// declaration.
@@ -931,7 +940,8 @@ public:
       : Declaration(D), Pattern(Pattern), Priority(Priority), Kind(RK_Pattern),
         Hidden(false), InBaseClass(false), QualifierIsInformative(false),
         StartsNestedNameSpecifier(false), AllParametersAreInformative(false),
-        DeclaringEntity(false), FunctionCanBeCall(true) {
+        DeclaringEntity(false), FunctionCanBeCall(true),
+        DeducibleFromAddressOfFunctionTemplate(false) {
     computeCursorKindAndAvailability();
   }
 
