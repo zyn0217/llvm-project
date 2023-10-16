@@ -393,6 +393,8 @@ Bug Fixes in This Version
   operator in C. No longer issuing a confusing diagnostic along the lines of
   "incompatible operand types ('foo' and 'foo')" with extensions such as matrix
   types. Fixes (`#69008 <https://github.com/llvm/llvm-project/issues/69008>`_)
+- Fixed an issue that a benign assertion might hit when instantiating a pack expansion
+  inside a lambda. (`#61460 <https://github.com/llvm/llvm-project/issues/61460>`_)
 
 Bug Fixes to Compiler Builtins
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

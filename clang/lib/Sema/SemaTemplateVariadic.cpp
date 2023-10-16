@@ -390,7 +390,6 @@ bool Sema::DiagnoseUnexpandedParameterPack(SourceLocation Loc,
   SmallVector<UnexpandedParameterPack, 2> Unexpanded;
   CollectUnexpandedParameterPacksVisitor(Unexpanded).TraverseTypeLoc(
                                                               T->getTypeLoc());
-  assert(!Unexpanded.empty() && "Unable to find unexpanded parameter packs");
   return DiagnoseUnexpandedParameterPacks(Loc, UPPC, Unexpanded);
 }
 
@@ -404,7 +403,6 @@ bool Sema::DiagnoseUnexpandedParameterPack(Expr *E,
 
   SmallVector<UnexpandedParameterPack, 2> Unexpanded;
   CollectUnexpandedParameterPacksVisitor(Unexpanded).TraverseStmt(E);
-  assert(!Unexpanded.empty() && "Unable to find unexpanded parameter packs");
   return DiagnoseUnexpandedParameterPacks(E->getBeginLoc(), UPPC, Unexpanded);
 }
 
@@ -443,7 +441,6 @@ bool Sema::DiagnoseUnexpandedParameterPack(const CXXScopeSpec &SS,
   SmallVector<UnexpandedParameterPack, 2> Unexpanded;
   CollectUnexpandedParameterPacksVisitor(Unexpanded)
     .TraverseNestedNameSpecifier(SS.getScopeRep());
-  assert(!Unexpanded.empty() && "Unable to find unexpanded parameter packs");
   return DiagnoseUnexpandedParameterPacks(SS.getRange().getBegin(),
                                           UPPC, Unexpanded);
 }
@@ -480,7 +477,6 @@ bool Sema::DiagnoseUnexpandedParameterPack(const DeclarationNameInfo &NameInfo,
   SmallVector<UnexpandedParameterPack, 2> Unexpanded;
   CollectUnexpandedParameterPacksVisitor(Unexpanded)
     .TraverseType(NameInfo.getName().getCXXNameType());
-  assert(!Unexpanded.empty() && "Unable to find unexpanded parameter packs");
   return DiagnoseUnexpandedParameterPacks(NameInfo.getLoc(), UPPC, Unexpanded);
 }
 
@@ -494,7 +490,6 @@ bool Sema::DiagnoseUnexpandedParameterPack(SourceLocation Loc,
   SmallVector<UnexpandedParameterPack, 2> Unexpanded;
   CollectUnexpandedParameterPacksVisitor(Unexpanded)
     .TraverseTemplateName(Template);
-  assert(!Unexpanded.empty() && "Unable to find unexpanded parameter packs");
   return DiagnoseUnexpandedParameterPacks(Loc, UPPC, Unexpanded);
 }
 
@@ -507,7 +502,6 @@ bool Sema::DiagnoseUnexpandedParameterPack(TemplateArgumentLoc Arg,
   SmallVector<UnexpandedParameterPack, 2> Unexpanded;
   CollectUnexpandedParameterPacksVisitor(Unexpanded)
     .TraverseTemplateArgumentLoc(Arg);
-  assert(!Unexpanded.empty() && "Unable to find unexpanded parameter packs");
   return DiagnoseUnexpandedParameterPacks(Arg.getLocation(), UPPC, Unexpanded);
 }
 
