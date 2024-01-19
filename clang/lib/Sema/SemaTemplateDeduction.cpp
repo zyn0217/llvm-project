@@ -3634,6 +3634,34 @@ Sema::TemplateDeductionResult Sema::FinishTemplateArgumentDeduction(
           NumExplicitlySpecified, PartialOverloading))
     return Result;
 
+  // Form the template argument list from the deduced template arguments.
+  TemplateArgumentList *SugaredDeducedArgumentList =
+      TemplateArgumentList::CreateCopy(Context, SugaredBuilder);
+  TemplateArgumentList *CanonicalDeducedArgumentList =
+      TemplateArgumentList::CreateCopy(Context, CanonicalBuilder);
+  Info.reset(SugaredDeducedArgumentList, CanonicalDeducedArgumentList);
+
+  MultiLevelTemplateArgumentList SubstArgs(
+      FunctionTemplate, CanonicalDeducedArgumentList->asArray(),
+      /*Final=*/false);
+
+  llvm::SmallVector<const Expr*> AssociatedConstraints;
+  FunctionTemplate->getAssociatedConstraints(AssociatedConstraints);
+  if (!PartialOverloading ||
+      (CanonicalBuilder.size() ==
+       FunctionTemplate->getTemplateParameters()->size())) {
+    if (CheckConstraintSatisfaction(FunctionTemplate->getTemplatedDecl(),
+                                    AssociatedConstraints, SubstArgs,
+                                    Info.getLocation(),
+                                    Info.AssociatedConstraintsSatisfaction))
+      return TDK_MiscellaneousDeductionFailure;
+    if (!Info.AssociatedConstraintsSatisfaction.IsSatisfied) {
+      Info.reset(Info.takeSugared(),
+                 TemplateArgumentList::CreateCopy(Context, CanonicalBuilder));
+      return TDK_ConstraintsNotSatisfied;
+    }
+  }
+
   // C++ [temp.deduct.call]p10: [DR1391]
   //   If deduction succeeds for all parameters that contain
   //   template-parameters that participate in template argument deduction,
@@ -3645,13 +3673,6 @@ Sema::TemplateDeductionResult Sema::FinishTemplateArgumentDeduction(
   //   A cannot be implicitly converted to P, deduction fails.
   if (CheckNonDependent())
     return TDK_NonDependentConversionFailure;
-
-  // Form the template argument list from the deduced template arguments.
-  TemplateArgumentList *SugaredDeducedArgumentList =
-      TemplateArgumentList::CreateCopy(Context, SugaredBuilder);
-  TemplateArgumentList *CanonicalDeducedArgumentList =
-      TemplateArgumentList::CreateCopy(Context, CanonicalBuilder);
-  Info.reset(SugaredDeducedArgumentList, CanonicalDeducedArgumentList);
 
   // Substitute the deduced template arguments into the function template
   // declaration to produce the function template specialization.
@@ -3675,9 +3696,6 @@ Sema::TemplateDeductionResult Sema::FinishTemplateArgumentDeduction(
     FD = const_cast<FunctionDecl *>(FDFriend);
     Owner = FD->getLexicalDeclContext();
   }
-  MultiLevelTemplateArgumentList SubstArgs(
-      FunctionTemplate, CanonicalDeducedArgumentList->asArray(),
-      /*Final=*/false);
   Specialization = cast_or_null<FunctionDecl>(
       SubstDecl(FD, Owner, SubstArgs));
   if (!Specialization || Specialization->isInvalidDecl())
