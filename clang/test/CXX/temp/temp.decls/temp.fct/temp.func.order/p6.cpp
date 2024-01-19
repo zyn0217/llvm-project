@@ -178,3 +178,16 @@ namespace NestedConstraintsDiffer {
   template<B U, template<B auto> typename TT> void h(U, Y<TT>) {}
   void i(Y<W> x) { h(0, x); }
 }
+
+namespace GH77377 {
+  template <class T>
+  concept C = true;
+
+  template <auto>
+  struct A;
+
+  template <C auto p>
+  struct A<p> {};
+
+  A<0> a;
+}

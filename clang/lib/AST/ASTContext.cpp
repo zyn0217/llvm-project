@@ -5797,9 +5797,10 @@ QualType ASTContext::getUnconstrainedType(QualType T) const {
 
   // Remove a type-constraint from a top-level auto or decltype(auto).
   if (auto *AT = CanonT->getAs<AutoType>()) {
-    if (!AT->isConstrained())
-      return T;
-    return getQualifiedType(getAutoType(QualType(), AT->getKeyword(), false,
+    // if (!AT->isConstrained())
+    //   return T;
+    return getQualifiedType(getAutoType(AT->getDeducedType(), AT->getKeyword(),
+                                        false,
                                         AT->containsUnexpandedParameterPack()),
                             T.getQualifiers());
   }
