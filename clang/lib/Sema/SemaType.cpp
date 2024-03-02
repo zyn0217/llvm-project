@@ -1701,11 +1701,13 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
                       : AutoTypeKeyword::Auto;
 
     ConceptDecl *TypeConstraintConcept = nullptr;
+    NamedDecl *UsingShadowDecl = nullptr;
     llvm::SmallVector<TemplateArgument, 8> TemplateArgs;
     if (DS.isConstrainedAuto()) {
       if (TemplateIdAnnotation *TemplateId = DS.getRepAsTemplateId()) {
         TypeConstraintConcept =
             cast<ConceptDecl>(TemplateId->Template.get().getAsTemplateDecl());
+        UsingShadowDecl = TemplateId->Template.get().getAsUsingShadowDecl();
         TemplateArgumentListInfo TemplateArgsInfo;
         TemplateArgsInfo.setLAngleLoc(TemplateId->LAngleLoc);
         TemplateArgsInfo.setRAngleLoc(TemplateId->RAngleLoc);
@@ -3496,10 +3498,11 @@ InventTemplateParameter(TypeProcessingState &state, QualType T,
         TAL.addArgument(AutoLoc.getArgLoc(Idx));
       }
 
+      // FIXME: AutoType
       if (!Invalid) {
         S.AttachTypeConstraint(
             AutoLoc.getNestedNameSpecifierLoc(), AutoLoc.getConceptNameInfo(),
-            AutoLoc.getNamedConcept(),
+            AutoLoc.getNamedConcept(), /*FoundDecl=*/AutoLoc.getNamedConcept(),
             AutoLoc.hasExplicitTemplateArgs() ? &TAL : nullptr,
             InventedTemplateParam, D.getEllipsisLoc());
       }
@@ -3530,6 +3533,7 @@ InventTemplateParameter(TypeProcessingState &state, QualType T,
             DeclarationNameInfo(DeclarationName(TemplateId->Name),
                                 TemplateId->TemplateNameLoc),
             cast<ConceptDecl>(TemplateId->Template.get().getAsTemplateDecl()),
+            /*FoundDecl=*/TemplateId->Template.get().getAsUsingShadowDecl(),
             TemplateId->LAngleLoc.isValid() ? &TemplateArgsInfo : nullptr,
             InventedTemplateParam, D.getEllipsisLoc());
       }
@@ -6423,9 +6427,12 @@ namespace {
       DeclarationNameInfo DNI = DeclarationNameInfo(
           TL.getTypePtr()->getTypeConstraintConcept()->getDeclName(),
           TemplateId->TemplateNameLoc);
+      auto TN = TemplateId->Template.get();
       auto *CR = ConceptReference::Create(
           Context, NNS, TemplateId->TemplateKWLoc, DNI,
-          /*FoundDecl=*/nullptr,
+          /*FoundDecl=*/TN.getKind() == TemplateName::NameKind::UsingTemplate
+              ? cast<NamedDecl>(TN.getAsUsingShadowDecl())
+              : cast_if_present<NamedDecl>(TN.getAsTemplateDecl()),
           /*NamedDecl=*/TL.getTypePtr()->getTypeConstraintConcept(),
           ASTTemplateArgumentListInfo::Create(Context, TemplateArgsInfo));
       TL.setConceptReference(CR);

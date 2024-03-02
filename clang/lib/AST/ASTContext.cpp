@@ -5787,6 +5787,7 @@ QualType ASTContext::getUnaryTransformType(QualType BaseType,
 QualType ASTContext::getAutoTypeInternal(
     QualType DeducedType, AutoTypeKeyword Keyword, bool IsDependent,
     bool IsPack, ConceptDecl *TypeConstraintConcept,
+    NamedDecl *ConstraintFoundDecl,
     ArrayRef<TemplateArgument> TypeConstraintArgs, bool IsCanon) const {
   if (DeducedType.isNull() && Keyword == AutoTypeKeyword::Auto &&
       !TypeConstraintConcept && !IsDependent)
@@ -5810,9 +5811,9 @@ QualType ASTContext::getAutoTypeInternal(
       auto CanonicalConceptArgs = ::getCanonicalTemplateArguments(
           *this, TypeConstraintArgs, AnyNonCanonArgs);
       if (CanonicalConcept != TypeConstraintConcept || AnyNonCanonArgs) {
-        Canon =
-            getAutoTypeInternal(QualType(), Keyword, IsDependent, IsPack,
-                                CanonicalConcept, CanonicalConceptArgs, true);
+        Canon = getAutoTypeInternal(QualType(), Keyword, IsDependent, IsPack,
+                                    CanonicalConcept, ConstraintFoundDecl,
+                                    CanonicalConceptArgs, true);
         // Find the insert position again.
         [[maybe_unused]] auto *Nothing =
             AutoTypes.FindNodeOrInsertPos(ID, InsertPos);
@@ -5842,12 +5843,14 @@ QualType
 ASTContext::getAutoType(QualType DeducedType, AutoTypeKeyword Keyword,
                         bool IsDependent, bool IsPack,
                         ConceptDecl *TypeConstraintConcept,
+                        NamedDecl *ConstraintFoundDecl,
                         ArrayRef<TemplateArgument> TypeConstraintArgs) const {
   assert((!IsPack || IsDependent) && "only use IsPack for a dependent pack");
   assert((!IsDependent || DeducedType.isNull()) &&
          "A dependent auto should be undeduced");
   return getAutoTypeInternal(DeducedType, Keyword, IsDependent, IsPack,
-                             TypeConstraintConcept, TypeConstraintArgs);
+                             TypeConstraintConcept, ConstraintFoundDecl,
+                             TypeConstraintArgs);
 }
 
 QualType ASTContext::getUnconstrainedType(QualType T) const {
@@ -12760,6 +12763,7 @@ static QualType getCommonNonSugarTypeNode(ASTContext &Ctx, const Type *X,
                            AX->containsUnexpandedParameterPack(),
                            getCommonDeclChecked(AX->getTypeConstraintConcept(),
                                                 AY->getTypeConstraintConcept()),
+                           /*ConstraintFoundDecl=*/nullptr,
                            As);
   }
   case Type::IncompleteArray: {
@@ -13132,7 +13136,8 @@ static QualType getCommonSugarTypeNode(ASTContext &Ctx, const Type *X,
     // Both auto types can't be dependent, otherwise they wouldn't have been
     // sugar. This implies they can't contain unexpanded packs either.
     return Ctx.getAutoType(Ctx.getQualifiedType(Underlying), AX->getKeyword(),
-                           /*IsDependent=*/false, /*IsPack=*/false, CD, As);
+                           /*IsDependent=*/false, /*IsPack=*/false, CD,
+                           /*ConstraintFoundDecl=*/nullptr, As);
   }
   case Type::PackIndexing:
   case Type::Decltype:

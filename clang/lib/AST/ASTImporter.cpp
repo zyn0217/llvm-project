@@ -1469,6 +1469,7 @@ ExpectedType ASTNodeImporter::VisitAutoType(const AutoType *T) {
   return Importer.getToContext().getAutoType(
       *ToDeducedTypeOrErr, T->getKeyword(), /*IsDependent*/false,
       /*IsPack=*/false, cast_or_null<ConceptDecl>(*ToTypeConstraintConcept),
+      /*ConstraintFoundDecl=*/nullptr,
       ToTemplateArgs);
 }
 

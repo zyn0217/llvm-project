@@ -1566,6 +1566,7 @@ private:
   getAutoTypeInternal(QualType DeducedType, AutoTypeKeyword Keyword,
                       bool IsDependent, bool IsPack = false,
                       ConceptDecl *TypeConstraintConcept = nullptr,
+                      NamedDecl *ConstraintFoundDecl = nullptr,
                       ArrayRef<TemplateArgument> TypeConstraintArgs = {},
                       bool IsCanon = false) const;
 
@@ -1729,6 +1730,7 @@ public:
   QualType getAutoType(QualType DeducedType, AutoTypeKeyword Keyword,
                        bool IsDependent, bool IsPack = false,
                        ConceptDecl *TypeConstraintConcept = nullptr,
+                       NamedDecl *ConstraintFoundDecl = nullptr,
                        ArrayRef<TemplateArgument> TypeConstraintArgs ={}) const;
 
   /// C++11 deduction pattern for 'auto' type.

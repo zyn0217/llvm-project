@@ -57,3 +57,21 @@ struct Foo {
   template <variadic_concept<int>... Ts>
   Foo();
 };
+
+namespace GH82628 {
+namespace ns {
+
+template <typename T>
+concept C = true;
+
+} // namespace ns
+
+using ns::C;
+
+// CHECK:     ConceptDecl {{.*}} Foo
+// CHECK-NEXT: |-TemplateTypeParmDecl {{.*}} typename depth 0 index 0 T
+// CHECK-NEXT: `-ConceptSpecializationExpr {{.*}} UsingShadow {{.*}} 'C'
+template <typename T>
+concept Foo = C<T>;
+
+}
