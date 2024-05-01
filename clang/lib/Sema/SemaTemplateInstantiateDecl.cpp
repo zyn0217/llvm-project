@@ -13,6 +13,7 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTMutationListener.h"
+#include "clang/AST/DeclFriend.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclVisitor.h"
 #include "clang/AST/DependentDiagnostic.h"
@@ -20,12 +21,14 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/PrettyDeclStackTrace.h"
 #include "clang/AST/TypeLoc.h"
+#include "clang/Basic/DiagnosticIDs.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Sema/EnterExpressionEvaluationContext.h"
 #include "clang/Sema/Initialization.h"
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/ScopeInfo.h"
+#include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaCUDA.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/SemaOpenMP.h"
@@ -1441,14 +1444,53 @@ Decl *TemplateDeclInstantiator::VisitFriendDecl(FriendDecl *D) {
     if (D->isUnsupportedFriend()) {
       InstTy = Ty;
     } else {
+      if (D->getEllipsisLoc().isValid()) {
+        SmallVector<UnexpandedParameterPack, 2> Unexpanded;
+        SemaRef.collectUnexpandedParameterPacks(Ty->getTypeLoc(), Unexpanded);
+        assert(!Unexpanded.empty() &&
+               "Pack expansion without parameter packs?");
+        bool ShouldExpand = true;
+        bool RetainExpansion = false;
+        std::optional<unsigned> OrigNumExpansions;
+        std::optional<unsigned> NumExpansions = OrigNumExpansions;
+        if (SemaRef.CheckParameterPacksForExpansion(
+                D->getEllipsisLoc(), SourceRange(), Unexpanded, TemplateArgs,
+                ShouldExpand, RetainExpansion, NumExpansions))
+          return nullptr;
+        if (ShouldExpand) {
+          SmallVector<FriendDecl *, 2> FriendDecls;
+          for (unsigned I = 0; I != *NumExpansions; ++I) {
+            Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(SemaRef, I);
+            TypeSourceInfo *TSI = SemaRef.SubstType(
+                Ty, TemplateArgs, D->getEllipsisLoc(), DeclarationName());
+            if (!TSI)
+              return nullptr;
+            auto *FD =
+                FriendDecl::Create(SemaRef.Context, Owner, D->getLocation(),
+                                   TSI, D->getFriendLoc(),
+                                   /*EllipsisLoc=*/SourceLocation());
+            FD->setAccess(AS_public);
+            FD->setUnsupportedFriend(D->isUnsupportedFriend());
+            Owner->addDecl(FD);
+            FriendDecls.push_back(FD);
+          }
+          FriendPackDecl *FPD =
+              FriendPackDecl::Create(SemaRef.Context, Owner, D, FriendDecls);
+          FPD->setAccess(AS_public);
+          Owner->addDecl(FPD);
+          return FPD;
+        }
+      }
+
       InstTy = SemaRef.SubstType(Ty, TemplateArgs,
                                  D->getLocation(), DeclarationName());
     }
     if (!InstTy)
       return nullptr;
 
-    FriendDecl *FD = FriendDecl::Create(
-        SemaRef.Context, Owner, D->getLocation(), InstTy, D->getFriendLoc());
+    FriendDecl *FD =
+        FriendDecl::Create(SemaRef.Context, Owner, D->getLocation(), InstTy,
+                           D->getFriendLoc(), /*EllipsisLoc=*/SourceLocation());
     FD->setAccess(AS_public);
     FD->setUnsupportedFriend(D->isUnsupportedFriend());
     Owner->addDecl(FD);
@@ -1465,13 +1507,30 @@ Decl *TemplateDeclInstantiator::VisitFriendDecl(FriendDecl *D) {
   Decl *NewND = Visit(ND);
   if (!NewND) return nullptr;
 
-  FriendDecl *FD =
-    FriendDecl::Create(SemaRef.Context, Owner, D->getLocation(),
-                       cast<NamedDecl>(NewND), D->getFriendLoc());
+  FriendDecl *FD = FriendDecl::Create(SemaRef.Context, Owner, D->getLocation(),
+                                      cast<NamedDecl>(NewND), D->getFriendLoc(),
+                                      /*EllipsisLoc=*/SourceLocation());
   FD->setAccess(AS_public);
   FD->setUnsupportedFriend(D->isUnsupportedFriend());
   Owner->addDecl(FD);
   return FD;
+}
+
+Decl *TemplateDeclInstantiator::VisitFriendPackDecl(FriendPackDecl *D) {
+  return D;
+  // SmallVector<NamedDecl*, 8> Expansions;
+  // for (auto *UD : D->expansions()) {
+  //   if (NamedDecl *NewUD =
+  //           SemaRef.FindInstantiatedDecl(D->getLocation(), UD, TemplateArgs))
+  //     Expansions.push_back(NewUD);
+  //   else
+  //     return nullptr;
+  // }
+
+  // auto *NewD = SemaRef.BuildUsingPackDecl(D, Expansions);
+  // if (isDeclWithinFunction(D))
+  //   SemaRef.CurrentInstantiationScope->InstantiatedLocal(D, NewD);
+  // return NewD;
 }
 
 Decl *TemplateDeclInstantiator::VisitStaticAssertDecl(StaticAssertDecl *D) {
@@ -4170,9 +4229,9 @@ FunctionDecl *Sema::SubstSpaceshipAsEqualEqual(CXXRecordDecl *RD,
     if (!R)
       return nullptr;
 
-    FriendDecl *FD =
-        FriendDecl::Create(Context, RD, Spaceship->getLocation(),
-                           cast<NamedDecl>(R), Spaceship->getBeginLoc());
+    FriendDecl *FD = FriendDecl::Create(
+        Context, RD, Spaceship->getLocation(), cast<NamedDecl>(R),
+        Spaceship->getBeginLoc(), /*EllipsisLoc=*/SourceLocation());
     FD->setAccess(AS_public);
     RD->addDecl(FD);
   }

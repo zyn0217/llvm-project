@@ -35,6 +35,7 @@ FriendDecl *FriendDecl::Create(ASTContext &C, DeclContext *DC,
                                SourceLocation L,
                                FriendUnion Friend,
                                SourceLocation FriendL,
+                               SourceLocation EllipsisLoc,
                           ArrayRef<TemplateParameterList *> FriendTypeTPLists) {
 #ifndef NDEBUG
   if (Friend.is<NamedDecl *>()) {
@@ -56,8 +57,8 @@ FriendDecl *FriendDecl::Create(ASTContext &C, DeclContext *DC,
   std::size_t Extra =
       FriendDecl::additionalSizeToAlloc<TemplateParameterList *>(
           FriendTypeTPLists.size());
-  auto *FD = new (C, DC, Extra) FriendDecl(DC, L, Friend, FriendL,
-                                           FriendTypeTPLists);
+  auto *FD = new (C, DC, Extra)
+      FriendDecl(DC, L, Friend, FriendL, EllipsisLoc, FriendTypeTPLists);
   cast<CXXRecordDecl>(DC)->pushFriendDecl(FD);
   return FD;
 }
@@ -73,4 +74,23 @@ FriendDecl *CXXRecordDecl::getFirstFriend() const {
   ExternalASTSource *Source = getParentASTContext().getExternalSource();
   Decl *First = data().FirstFriend.get(Source);
   return First ? cast<FriendDecl>(First) : nullptr;
+}
+
+FriendPackDecl *FriendPackDecl::Create(ASTContext &C, DeclContext *DC,
+                                       FriendDecl *InstantiatedFrom,
+                                       ArrayRef<FriendDecl *> FriendDecls) {
+  size_t Extra = additionalSizeToAlloc<FriendDecl *>(FriendDecls.size());
+  return new (C, DC, Extra) FriendPackDecl(DC, InstantiatedFrom, FriendDecls);
+}
+
+FriendPackDecl *FriendPackDecl::CreateDeserialized(ASTContext &C, DeclID ID,
+                                                   unsigned NumExpansions) {
+  size_t Extra = additionalSizeToAlloc<FriendDecl *>(NumExpansions);
+  auto *Result =
+      new (C, ID, Extra) FriendPackDecl(nullptr, nullptr, std::nullopt);
+  Result->NumExpansions = NumExpansions;
+  auto *Trail = Result->getTrailingObjects<FriendDecl *>();
+  for (unsigned I = 0; I != NumExpansions; ++I)
+    new (Trail + I) FriendDecl *(nullptr);
+  return Result;
 }

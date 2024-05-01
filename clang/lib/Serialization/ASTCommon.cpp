@@ -421,6 +421,7 @@ bool serialization::isRedeclarableDeclKind(unsigned Kind) {
   case Decl::AccessSpec:
   case Decl::Friend:
   case Decl::FriendTemplate:
+  case Decl::FriendPack:
   case Decl::StaticAssert:
   case Decl::Block:
   case Decl::Captured:

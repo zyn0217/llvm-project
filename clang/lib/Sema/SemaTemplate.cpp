@@ -2213,7 +2213,8 @@ DeclResult Sema::CheckClassTemplate(
     }
 
     FriendDecl *Friend = FriendDecl::Create(
-        Context, CurContext, NewClass->getLocation(), NewTemplate, FriendLoc);
+        Context, CurContext, NewClass->getLocation(), NewTemplate, FriendLoc,
+        /*EllipsisLoc=*/SourceLocation());
     Friend->setAccess(AS_public);
     CurContext->addDecl(Friend);
   }
@@ -9659,10 +9660,9 @@ DeclResult Sema::ActOnClassTemplateSpecialization(
     Specialization->startDefinition();
 
   if (TUK == TUK_Friend) {
-    FriendDecl *Friend = FriendDecl::Create(Context, CurContext,
-                                            TemplateNameLoc,
-                                            WrittenTy,
-                                            /*FIXME:*/KWLoc);
+    FriendDecl *Friend =
+        FriendDecl::Create(Context, CurContext, TemplateNameLoc, WrittenTy,
+                           /*FIXME:*/ KWLoc, /*EllipsisLoc=*/SourceLocation());
     Friend->setAccess(AS_public);
     CurContext->addDecl(Friend);
   } else {

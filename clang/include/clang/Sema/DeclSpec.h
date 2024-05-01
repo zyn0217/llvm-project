@@ -775,6 +775,7 @@ public:
                       unsigned &DiagID);
 
   void SetPackIndexingExpr(SourceLocation EllipsisLoc, Expr *Pack);
+  void SetVariadicFriendEllipsisLoc(SourceLocation EllipsisLoc);
 
   bool SetTypeSpecError();
   void UpdateDeclRep(Decl *Rep) {

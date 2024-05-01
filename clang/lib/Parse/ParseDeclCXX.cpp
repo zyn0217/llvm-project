@@ -3004,6 +3004,40 @@ Parser::ParseCXXClassMemberDeclaration(AccessSpecifier AS,
     return Actions.ConvertDeclToDeclGroup(TheDecl);
   }
 
+  SmallVector<Decl *, 8> DeclsInGroup;
+  SourceLocation FriendLoc = DS.getFriendSpecLoc();
+  if (FriendLoc.isValid() && Tok.isOneOf(tok::comma, tok::ellipsis)) {
+    auto ParsedFriendDecl = [&](ParsingDeclSpec &DS) {
+      SourceLocation EllipsisLoc;
+      TryConsumeToken(tok::ellipsis, EllipsisLoc);
+      DS.SetVariadicFriendEllipsisLoc(EllipsisLoc);
+      ProhibitAttributes(DeclAttrs);
+      [[maybe_unused]] RecordDecl *AnonRecord = nullptr;
+
+      Decl *TheDecl = Actions.ParsedFreeStandingDeclSpec(
+          getCurScope(), AS, DS, DeclAttrs, TemplateParams, false, AnonRecord);
+      DS.complete(TheDecl);
+      if (TheDecl)
+        DeclsInGroup.push_back(TheDecl);
+      else
+        SkipUntil(tok::comma, tok::semi, StopBeforeMatch);
+    };
+    ParsedFriendDecl(DS);
+    while (Tok.is(tok::comma)) {
+      ConsumeToken();
+      ParsingDeclSpec DS(*this, TemplateDiags);
+      [[maybe_unused]] const char *PrevSpec = "";
+      [[maybe_unused]] unsigned DiagId = 0;
+      DS.SetFriendSpec(FriendLoc, PrevSpec, DiagId);
+      ParseDeclarationSpecifiers(DS, TemplateInfo, AS,
+                                 DeclSpecContext::DSC_class,
+                                 &CommonLateParsedAttrs);
+      ParsedFriendDecl(DS);
+    }
+    ExpectAndConsume(tok::semi, diag::err_expected_semi_after_stmt, "variadic friends");
+    return Actions.BuildDeclaratorGroup(DeclsInGroup);
+  }
+
   if (DS.hasTagDefinition())
     Actions.ActOnDefinedDeclarationSpecifier(DS.getRepAsDecl());
 
@@ -3040,7 +3074,6 @@ Parser::ParseCXXClassMemberDeclaration(AccessSpecifier AS,
     return true;
   };
 
-  SmallVector<Decl *, 8> DeclsInGroup;
   ExprResult BitfieldSize;
   ExprResult TrailingRequiresClause;
   bool ExpectSemi = true;

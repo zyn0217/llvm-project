@@ -1600,6 +1600,8 @@ DEF_TRAVERSE_DECL(FriendTemplateDecl, {
   }
 })
 
+DEF_TRAVERSE_DECL(FriendPackDecl, {})
+
 DEF_TRAVERSE_DECL(LinkageSpecDecl, {})
 
 DEF_TRAVERSE_DECL(ExportDecl, {})

@@ -912,6 +912,7 @@ unsigned Decl::getIdentifierNamespaceForKind(Kind DeclKind) {
     // Never have names.
     case Friend:
     case FriendTemplate:
+    case FriendPack:
     case AccessSpec:
     case LinkageSpec:
     case Export:

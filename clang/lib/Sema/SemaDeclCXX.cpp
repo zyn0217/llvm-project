@@ -17695,8 +17695,9 @@ DeclResult Sema::ActOnTemplatedFriendTag(
       TL.getNamedTypeLoc().castAs<TypeSpecTypeLoc>().setNameLoc(NameLoc);
     }
 
-    FriendDecl *Friend = FriendDecl::Create(Context, CurContext, NameLoc,
-                                            TSI, FriendLoc, TempParamLists);
+    FriendDecl *Friend =
+        FriendDecl::Create(Context, CurContext, NameLoc, TSI, FriendLoc,
+                           /*EllipsisLoc=*/SourceLocation(), TempParamLists);
     Friend->setAccess(AS_public);
     CurContext->addDecl(Friend);
     return Friend;
@@ -17719,8 +17720,9 @@ DeclResult Sema::ActOnTemplatedFriendTag(
   TL.setQualifierLoc(SS.getWithLocInContext(Context));
   TL.setNameLoc(NameLoc);
 
-  FriendDecl *Friend = FriendDecl::Create(Context, CurContext, NameLoc,
-                                          TSI, FriendLoc, TempParamLists);
+  FriendDecl *Friend =
+      FriendDecl::Create(Context, CurContext, NameLoc, TSI, FriendLoc,
+                         /*EllipsisLoc=*/SourceLocation(), TempParamLists);
   Friend->setAccess(AS_public);
   Friend->setUnsupportedFriend(true);
   CurContext->addDecl(Friend);
@@ -17786,7 +17788,8 @@ Decl *Sema::ActOnFriendTypeDecl(Scope *S, const DeclSpec &DS,
   if (TheDeclarator.isInvalidType())
     return nullptr;
 
-  if (DiagnoseUnexpandedParameterPack(Loc, TSI, UPPC_FriendDeclaration))
+  if (DS.getEllipsisLoc().isInvalid() &&
+      DiagnoseUnexpandedParameterPack(Loc, TSI, UPPC_FriendDeclaration))
     return nullptr;
 
   if (!T->isElaboratedTypeSpecifier()) {
@@ -17837,7 +17840,7 @@ Decl *Sema::ActOnFriendTypeDecl(Scope *S, const DeclSpec &DS,
                                    FriendLoc);
   else
     D = FriendDecl::Create(Context, CurContext, TSI->getTypeLoc().getBeginLoc(),
-                           TSI, FriendLoc);
+                           TSI, FriendLoc, DS.getEllipsisLoc());
 
   if (!D)
     return nullptr;
@@ -18082,9 +18085,9 @@ NamedDecl *Sema::ActOnFriendFunctionDecl(Scope *S, Declarator &D,
       PushOnScopeChains(ND, EnclosingScope, /*AddToContext=*/ false);
   }
 
-  FriendDecl *FrD = FriendDecl::Create(Context, CurContext,
-                                       D.getIdentifierLoc(), ND,
-                                       DS.getFriendSpecLoc());
+  FriendDecl *FrD = FriendDecl::Create(
+      Context, CurContext, D.getIdentifierLoc(), ND, DS.getFriendSpecLoc(),
+      /*EllipsisLoc=*/SourceLocation());
   FrD->setAccess(AS_public);
   CurContext->addDecl(FrD);
 

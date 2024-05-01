@@ -70,6 +70,9 @@ private:
   // Location of the 'friend' specifier.
   SourceLocation FriendLoc;
 
+  // If this is a pack expansion, the location of the '...'.
+  SourceLocation EllipsisLoc;
+
   /// True if this 'friend' declaration is unsupported.  Eventually we
   /// will support every possible friend declaration, but for now we
   /// silently ignore some and set this flag to authorize all access.
@@ -82,10 +85,11 @@ private:
   unsigned NumTPLists : 31;
 
   FriendDecl(DeclContext *DC, SourceLocation L, FriendUnion Friend,
-             SourceLocation FriendL,
+             SourceLocation FriendL, SourceLocation EllipsisLoc,
              ArrayRef<TemplateParameterList *> FriendTypeTPLists)
       : Decl(Decl::Friend, DC, L), Friend(Friend), FriendLoc(FriendL),
-        UnsupportedFriend(false), NumTPLists(FriendTypeTPLists.size()) {
+        EllipsisLoc(EllipsisLoc), UnsupportedFriend(false),
+        NumTPLists(FriendTypeTPLists.size()) {
     for (unsigned i = 0; i < NumTPLists; ++i)
       getTrailingObjects<TemplateParameterList *>()[i] = FriendTypeTPLists[i];
   }
@@ -110,7 +114,7 @@ public:
 
   static FriendDecl *
   Create(ASTContext &C, DeclContext *DC, SourceLocation L, FriendUnion Friend_,
-         SourceLocation FriendL,
+         SourceLocation FriendL, SourceLocation EllipsisLoc,
          ArrayRef<TemplateParameterList *> FriendTypeTPLists = std::nullopt);
   static FriendDecl *CreateDeserialized(ASTContext &C, DeclID ID,
                                         unsigned FriendTypeNumTPLists);
@@ -142,6 +146,8 @@ public:
   SourceLocation getFriendLoc() const {
     return FriendLoc;
   }
+
+  SourceLocation getEllipsisLoc() const { return EllipsisLoc; }
 
   /// Retrieves the source range for the friend declaration.
   SourceRange getSourceRange() const override LLVM_READONLY {
@@ -252,6 +258,50 @@ inline void CXXRecordDecl::pushFriendDecl(FriendDecl *FD) {
   FD->NextFriend = data().FirstFriend;
   data().FirstFriend = FD;
 }
+
+class FriendPackDecl final
+    : public Decl,
+      private llvm::TrailingObjects<FriendPackDecl, FriendDecl *> {
+  FriendDecl *InstantiatedFrom;
+
+  /// The number of using-declarations created by this pack expansion.
+  unsigned NumExpansions;
+
+  FriendPackDecl(DeclContext *DC, FriendDecl *InstantiatedFrom,
+                 ArrayRef<FriendDecl *> FriendDecls)
+      : Decl(FriendPack, DC,
+             InstantiatedFrom ? InstantiatedFrom->getLocation()
+                              : SourceLocation()),
+        InstantiatedFrom(InstantiatedFrom), NumExpansions(FriendDecls.size()) {
+    std::uninitialized_copy(FriendDecls.begin(), FriendDecls.end(),
+                            getTrailingObjects<FriendDecl *>());
+  }
+
+public:
+  friend class ASTDeclReader;
+  friend class ASTDeclWriter;
+  friend TrailingObjects;
+
+  FriendDecl *getInstantiatedFromFriendDecl() const { return InstantiatedFrom; }
+
+  ArrayRef<FriendDecl *> expansions() const {
+    return llvm::ArrayRef(getTrailingObjects<FriendDecl *>(), NumExpansions);
+  }
+
+  static FriendPackDecl *Create(ASTContext &C, DeclContext *DC,
+                                FriendDecl *InstantiatedFrom,
+                                ArrayRef<FriendDecl *> FriendDecls);
+
+  static FriendPackDecl *CreateDeserialized(ASTContext &C, DeclID ID,
+                                            unsigned NumExpansions);
+
+  SourceRange getSourceRange() const override LLVM_READONLY {
+    return InstantiatedFrom->getSourceRange();
+  }
+
+  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
+  static bool classofKind(Kind K) { return K == FriendPack; }
+};
 
 } // namespace clang
 

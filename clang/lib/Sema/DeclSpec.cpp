@@ -994,6 +994,11 @@ void DeclSpec::SetPackIndexingExpr(SourceLocation EllipsisLoc,
   this->EllipsisLoc = EllipsisLoc;
 }
 
+void DeclSpec::SetVariadicFriendEllipsisLoc(SourceLocation EllipsisLoc) {
+  assert(isFriendSpecified());
+  this->EllipsisLoc = EllipsisLoc;
+}
+
 bool DeclSpec::SetTypeQual(TQ T, SourceLocation Loc, const char *&PrevSpec,
                            unsigned &DiagID, const LangOptions &Lang) {
   // Duplicates are permitted in C99 onwards, but are not permitted in C89 or
