@@ -1714,19 +1714,26 @@ NonTypeTemplateParmDecl *SubstNonTypeTemplateParmExpr::getParameter() const {
 
 PackIndexingExpr *PackIndexingExpr::Create(
     ASTContext &Context, SourceLocation EllipsisLoc, SourceLocation RSquareLoc,
-    Expr *PackIdExpr, Expr *IndexExpr, std::optional<int64_t> Index,
-    ArrayRef<Expr *> SubstitutedExprs, bool ExpandedToEmptyPack) {
-  QualType Type;
-  if (Index && !SubstitutedExprs.empty())
-    Type = SubstitutedExprs[*Index]->getType();
-  else
-    Type = Context.DependentTy;
+    QualType Type, Expr *PackIdExpr, Expr *IndexExpr,
+    std::optional<int64_t> Index, ArrayRef<Expr *> SubstitutedExprs,
+    bool ExpandedToEmptyPack) {
 
   void *Storage =
       Context.Allocate(totalSizeToAlloc<Expr *>(SubstitutedExprs.size()));
   return new (Storage)
       PackIndexingExpr(Type, EllipsisLoc, RSquareLoc, PackIdExpr, IndexExpr,
                        SubstitutedExprs, ExpandedToEmptyPack);
+}
+
+std::optional<unsigned> PackIndexingExpr::getNumExpansions() const {
+  if (!TransformedExpressions && !expandsToEmptyPack())
+    return std::nullopt;
+  if (llvm::any_of(getExpressions(), [](Expr *E) {
+        return isa<PackExpansionExpr>(E) &&
+               !cast<PackExpansionExpr>(E)->getNumExpansions();
+      }))
+    return std::nullopt;
+  return TransformedExpressions;
 }
 
 NamedDecl *PackIndexingExpr::getPackDecl() const {

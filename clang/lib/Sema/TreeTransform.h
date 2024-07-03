@@ -15113,8 +15113,7 @@ TreeTransform<Derived>::TransformPackIndexingExpr(PackIndexingExpr *E) {
     // be expanded.
     bool ShouldExpand = true;
     bool RetainExpansion = false;
-    std::optional<unsigned> OrigNumExpansions;
-    std::optional<unsigned> NumExpansions = OrigNumExpansions;
+    std::optional<unsigned> NumExpansions;
     if (getDerived().TryExpandParameterPacks(
             E->getEllipsisLoc(), Pattern->getSourceRange(), Unexpanded,
             ShouldExpand, RetainExpansion, NumExpansions))
@@ -15135,7 +15134,7 @@ TreeTransform<Derived>::TransformPackIndexingExpr(PackIndexingExpr *E) {
         return true;
       if (Out.get()->containsUnexpandedParameterPack()) {
         Out = getDerived().RebuildPackExpansion(Out.get(), E->getEllipsisLoc(),
-                                                OrigNumExpansions);
+                                                /*NumExpansions=*/std::nullopt);
         if (Out.isInvalid())
           return true;
       }
@@ -15151,7 +15150,7 @@ TreeTransform<Derived>::TransformPackIndexingExpr(PackIndexingExpr *E) {
         return true;
 
       Out = getDerived().RebuildPackExpansion(Out.get(), E->getEllipsisLoc(),
-                                              OrigNumExpansions);
+                                              /*NumExpansions=*/std::nullopt);
       if (Out.isInvalid())
         return true;
       ExpandedExprs.push_back(Out.get());

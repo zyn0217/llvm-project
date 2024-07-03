@@ -4417,8 +4417,9 @@ class PackIndexingExpr final
 public:
   static PackIndexingExpr *Create(ASTContext &Context,
                                   SourceLocation EllipsisLoc,
-                                  SourceLocation RSquareLoc, Expr *PackIdExpr,
-                                  Expr *IndexExpr, std::optional<int64_t> Index,
+                                  SourceLocation RSquareLoc, QualType Type,
+                                  Expr *PackIdExpr, Expr *IndexExpr,
+                                  std::optional<int64_t> Index,
                                   ArrayRef<Expr *> SubstitutedExprs = {},
                                   bool ExpandedToEmptyPack = false);
   static PackIndexingExpr *CreateDeserialized(ASTContext &Context,
@@ -4464,6 +4465,28 @@ public:
   ArrayRef<Expr *> getExpressions() const {
     return {getTrailingObjects<Expr *>(), TransformedExpressions};
   }
+
+  /// Returns the number of expansion, if known.
+  /// Note we have four states for pack expansion,
+  ///
+  /// 1) The PackIndexingExpr has never been expanded. In this case,
+  /// \code expandsToEmptyPack() == false && getNumExpansions() == nullopt \endcode
+  ///
+  /// 2) The PackIndexingExpr has been expanded, but it expands to empty.
+  /// \code expandsToEmptyPack() == true && getNumExpansions() == 0 \endcode
+  ///
+  /// 3) The PackIndexingExpr has been expanded, but the expansion should be
+  /// held off because the expansion size is unknown.
+  /// \code
+  /// expandsToEmptyPack() == false && getNumExpansions() == nullopt
+  /// \endcode
+  ///
+  /// 4) The PackIndexingExpr has been expanded to non-dependent expressions.
+  /// \code
+  /// expandsToEmptyPack() == false && getNumExpansions() ==
+  /// getExpressions().size()
+  /// \endcode
+  std::optional<unsigned> getNumExpansions() const;
 
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == PackIndexingExprClass;

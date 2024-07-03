@@ -385,7 +385,7 @@ ExprDependence clang::computeDependence(PackIndexingExpr *E) {
          ExprDependence::Instantiation;
 
   ArrayRef<Expr *> Exprs = E->getExpressions();
-  if (Exprs.empty())
+  if (!E->getNumExpansions())
     D |= PatternDep | ExprDependence::Instantiation;
 
   else if (!E->getIndexExpr()->isInstantiationDependent()) {

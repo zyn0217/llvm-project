@@ -1121,7 +1121,14 @@ Sema::BuildPackIndexingExpr(Expr *PackExpression, SourceLocation EllipsisLoc,
     IndexExpr = Res.get();
   }
 
-  if (Index && (!ExpandedExprs.empty() || EmptyPack)) {
+  bool ContainsUnexpandedParameterPack =
+      llvm::any_of(ExpandedExprs, [](Expr *E) {
+        return isa<PackExpansionExpr>(E) &&
+               !cast<PackExpansionExpr>(E)->getNumExpansions();
+      });
+
+  if (!ContainsUnexpandedParameterPack && Index &&
+      (!ExpandedExprs.empty() || EmptyPack)) {
     if (*Index < 0 || EmptyPack || *Index >= int64_t(ExpandedExprs.size())) {
       Diag(PackExpression->getBeginLoc(), diag::err_pack_index_out_of_bound)
           << *Index << PackExpression << ExpandedExprs.size();
@@ -1129,8 +1136,14 @@ Sema::BuildPackIndexingExpr(Expr *PackExpression, SourceLocation EllipsisLoc,
     }
   }
 
+  QualType Type;
+  if (!ContainsUnexpandedParameterPack && Index && !ExpandedExprs.empty())
+    Type = ExpandedExprs[*Index]->getType();
+  else
+    Type = Context.DependentTy;
+
   return PackIndexingExpr::Create(getASTContext(), EllipsisLoc, RSquareLoc,
-                                  PackExpression, IndexExpr, Index,
+                                  Type, PackExpression, IndexExpr, Index,
                                   ExpandedExprs, EmptyPack);
 }
 

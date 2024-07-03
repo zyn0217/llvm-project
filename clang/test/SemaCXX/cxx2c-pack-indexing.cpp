@@ -231,3 +231,22 @@ struct type_info {
 namespace GH93650 {
 auto func(auto... inputArgs) { return typeid(inputArgs...[0]); }
 } // namespace GH93650
+
+namespace init_capture_pack {
+
+void init_capture() {
+  auto L = [](auto... x) {
+    return [x...](auto... y) {
+      return [... w = y]() {
+        return w...[3];
+      };
+    };
+  };
+  static_assert(L()(0, 1, 2, 3)() == 3);
+  L()('a', 'b', 'c')();
+  // expected-error@-6 {{invalid index 3 for pack w of size 3}}
+  // expected-note@-8 {{while substituting}}
+  // expected-note@-3 {{requested here}}
+}
+
+}
