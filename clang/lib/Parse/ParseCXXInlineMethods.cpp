@@ -529,6 +529,9 @@ void Parser::ParseLexedMethodDeclaration(LateParsedMethodDeclaration &LM) {
     ExprResult NoexceptExpr;
     CachedTokens *ExceptionSpecTokens;
 
+    Sema::SynthesizedFunctionScope Scope(Actions,
+                                         cast<FunctionDecl>(LM.Method));
+
     ExceptionSpecificationType EST
       = tryParseExceptionSpecification(/*Delayed=*/false, SpecificationRange,
                                        DynamicExceptions,
