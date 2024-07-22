@@ -7239,6 +7239,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
+  Args.addLastArg(CmdArgs, options::OPT_fextraneous_template_headers,
+                  options::OPT_fno_extraneous_template_headers);
+
   // -fsized-deallocation is on by default in C++14 onwards and otherwise off
   // by default.
   Args.addLastArg(CmdArgs, options::OPT_fsized_deallocation,
