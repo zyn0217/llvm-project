@@ -2534,19 +2534,36 @@ Decl *TemplateDeclInstantiator::VisitCXXMethodDecl(
   // conditionally populate the TSI without breaking non-template related use
   // cases. Populate TSIs prior to calling SubstFunctionType to make sure we get
   // a proper transformation.
-  if (cast<CXXRecordDecl>(D->getParent())->isLambda() &&
-      !D->getTypeSourceInfo() &&
+  bool IsLambda = cast<CXXRecordDecl>(D->getParent())->isLambda();
+  bool DeferFunctionTypeSubstitution = false;
+  if (IsLambda && !D->getTypeSourceInfo() &&
       isa<CXXConstructorDecl, CXXDestructorDecl>(D)) {
     TypeSourceInfo *TSI =
         SemaRef.Context.getTrivialTypeSourceInfo(D->getType());
     D->setTypeSourceInfo(TSI);
+  } else if (IsLambda) {
+    if (auto FPTL = D->getTypeSourceInfo()
+                        ->getTypeLoc()
+                        .IgnoreParens()
+                        .getAs<FunctionProtoTypeLoc>();
+        !FPTL.isNull()) {
+      const FunctionProtoType *Type = FPTL.getTypePtr();
+      DeferFunctionTypeSubstitution = Type->hasTrailingReturn() ||
+                                      Type->getNoexceptExpr() ||
+                                      D->getTrailingRequiresClause();
+    }
   }
 
   SmallVector<ParmVarDecl *, 4> Params;
-  TypeSourceInfo *TInfo = SubstFunctionType(D, Params);
-  if (!TInfo)
-    return nullptr;
-  QualType T = adjustFunctionTypeForInstantiation(SemaRef.Context, D, TInfo);
+  TypeSourceInfo *TInfo = nullptr;
+  QualType T;
+
+  if (!DeferFunctionTypeSubstitution) {
+    TInfo = SubstFunctionType(D, Params);
+    if (!TInfo)
+      return nullptr;
+    T = adjustFunctionTypeForInstantiation(SemaRef.Context, D, TInfo);
+  }
 
   if (TemplateParams && TemplateParams->size()) {
     auto *LastParam =
@@ -2675,6 +2692,16 @@ Decl *TemplateDeclInstantiator::VisitCXXMethodDecl(
   } else if (!isFriend && FunctionRewriteKind == RewriteKind::None) {
     // Record that this is an instantiation of a member function.
     Method->setInstantiationOfMemberFunction(D, TSK_ImplicitInstantiation);
+  }
+
+  if (DeferFunctionTypeSubstitution) {
+    Sema::ContextRAII Context(SemaRef, Method, /*NewThisContext=*/false);
+    TInfo = SubstFunctionType(D, Params);
+    if (!TInfo)
+      return nullptr;
+    T = adjustFunctionTypeForInstantiation(SemaRef.Context, D, TInfo);
+    Method->setTypeSourceInfo(TInfo);
+    Method->setType(T);
   }
 
   // If we are instantiating a member function defined
