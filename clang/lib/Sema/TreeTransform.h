@@ -14659,8 +14659,8 @@ TreeTransform<Derived>::TransformLambdaExpr(LambdaExpr *E) {
   Expr *TrailingRequiresExpr =
       E->getCallOperator()->getTrailingRequiresClause();
   if (TrailingRequiresExpr) {
-    // If we're in an expansion, do not propagate up this flag. Otherwise we
-    // would fail to unexpand the surrounding CXXFoldExpr.
+    // The unexpanded constraints shouldn't make a difference in expanding a
+    // CXXFoldExpr because we don't evaluate them immediately.
     if (getSema().ArgumentPackSubstitutionIndex == -1)
       LSI->ContainsUnexpandedParameterPack |=
           TrailingRequiresExpr->containsUnexpandedParameterPack();

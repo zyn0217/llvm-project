@@ -157,8 +157,21 @@ namespace {
       Expr *E = dyn_cast_or_null<Expr>(S);
 
       llvm::SaveAndRestore _(InConstraint);
-      if (CurrentFunction && CurrentFunction->getTrailingRequiresClause() == S)
+      llvm::SaveAndRestore OldDepthLimit(DepthLimit);
+
+      if (CurrentFunction &&
+          CurrentFunction->getTrailingRequiresClause() == S) {
         InConstraint = true;
+        // template <class = void> void f() {
+        //   []<class... Is>() -> void {
+        //     ([]<class = void>()
+        //       -> int requires (!C<Is>)
+        //      { return 0; }(),
+        //      ...);
+        //   }.template operator()<char, int, float>();
+        // }
+        DepthLimit = -1;
+      }
 
       if ((E && E->containsUnexpandedParameterPack()) || InLambda)
         return inherited::TraverseStmt(S);
