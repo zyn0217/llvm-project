@@ -17259,10 +17259,11 @@ Sema::PushExpressionEvaluationContext(
     ExpressionEvaluationContext NewContext, ReuseLambdaContextDecl_t,
     ExpressionEvaluationContextRecord::ExpressionKind ExprContext) {
   const auto &PrevRec = ExprEvalContexts.back();
+  auto PrevLazyContextDeclPos = PrevRec.LazyContextDeclPos;
   PushExpressionEvaluationContext(NewContext, PrevRec.ContextDecl,
                                   PrevRec.ContextArgs, ExprContext);
   ExprEvalContexts.back().HasReusedDeclContext = true;
-  ExprEvalContexts.back().LazyContextDeclPos = PrevRec.LazyContextDeclPos;
+  ExprEvalContexts.back().LazyContextDeclPos = PrevLazyContextDeclPos;
 }
 
 namespace {
