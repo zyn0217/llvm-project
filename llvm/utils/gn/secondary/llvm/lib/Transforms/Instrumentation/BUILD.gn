@@ -21,7 +21,6 @@ static_library("Instrumentation") {
     "IndirectCallPromotion.cpp",
     "InstrOrderFile.cpp",
     "InstrProfiling.cpp",
-    "Instrumentation.cpp",
     "KCFI.cpp",
     "LowerAllowCheckPass.cpp",
     "MemProfiler.cpp",
@@ -32,11 +31,11 @@ static_library("Instrumentation") {
     "PGOForceFunctionAttrs.cpp",
     "PGOInstrumentation.cpp",
     "PGOMemOPSizeOpt.cpp",
-    "PoisonChecking.cpp",
     "RealtimeSanitizer.cpp",
     "SanitizerBinaryMetadata.cpp",
     "SanitizerCoverage.cpp",
     "ThreadSanitizer.cpp",
+    "TypeSanitizer.cpp",
     "ValueProfileCollector.cpp",
   ]
 }

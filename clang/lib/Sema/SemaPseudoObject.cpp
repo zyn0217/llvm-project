@@ -36,9 +36,7 @@
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Initialization.h"
 #include "clang/Sema/ScopeInfo.h"
-#include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/SemaObjC.h"
-#include "llvm/ADT/SmallString.h"
 
 using namespace clang;
 using namespace sema;
@@ -746,11 +744,11 @@ ExprResult ObjCPropertyOpBuilder::buildGet() {
     assert(InstanceReceiver || RefExpr->isSuperReceiver());
     msg = S.ObjC().BuildInstanceMessageImplicit(
         InstanceReceiver, receiverType, GenericLoc, Getter->getSelector(),
-        Getter, std::nullopt);
+        Getter, {});
   } else {
     msg = S.ObjC().BuildClassMessageImplicit(
         receiverType, RefExpr->isSuperReceiver(), GenericLoc,
-        Getter->getSelector(), Getter, std::nullopt);
+        Getter->getSelector(), Getter, {});
   }
   return msg;
 }
@@ -1122,13 +1120,16 @@ bool ObjCSubscriptOpBuilder::findAtIndexGetter() {
         /*isSynthesizedAccessorStub=*/false,
         /*isImplicitlyDeclared=*/true, /*isDefined=*/false,
         ObjCImplementationControl::Required, false);
-    ParmVarDecl *Argument = ParmVarDecl::Create(
-        S.Context, AtIndexGetter, SourceLocation(), SourceLocation(),
-        arrayRef ? &S.Context.Idents.get("index")
-                 : &S.Context.Idents.get("key"),
-        arrayRef ? S.Context.UnsignedLongTy : S.Context.getObjCIdType(),
-        /*TInfo=*/nullptr, SC_None, nullptr, /*TemplateDepth=*/0);
-    AtIndexGetter->setMethodParams(S.Context, Argument, std::nullopt);
+    ParmVarDecl *Argument = ParmVarDecl::Create(S.Context, AtIndexGetter,
+                                                SourceLocation(), SourceLocation(),
+                                                arrayRef ? &S.Context.Idents.get("index")
+                                                         : &S.Context.Idents.get("key"),
+                                                arrayRef ? S.Context.UnsignedLongTy
+                                                         : S.Context.getObjCIdType(),
+                                                /*TInfo=*/nullptr,
+                                                SC_None,
+                                                nullptr, /*TemplateDepth=*/0);
+    AtIndexGetter->setMethodParams(S.Context, Argument, {});
   }
 
   if (!AtIndexGetter) {
@@ -1234,7 +1235,7 @@ bool ObjCSubscriptOpBuilder::findAtIndexSetter() {
         arrayRef ? S.Context.UnsignedLongTy : S.Context.getObjCIdType(),
         /*TInfo=*/nullptr, SC_None, nullptr, /*TemplateDepth=*/0);
     Params.push_back(key);
-    AtIndexSetter->setMethodParams(S.Context, Params, std::nullopt);
+    AtIndexSetter->setMethodParams(S.Context, Params, {});
   }
 
   if (!AtIndexSetter) {

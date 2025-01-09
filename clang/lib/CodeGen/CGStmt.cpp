@@ -420,7 +420,7 @@ void CodeGenFunction::EmitStmt(const Stmt *S, ArrayRef<const Attr *> Attrs) {
     CGM.ErrorUnsupported(S, "OpenMP dispatch directive");
     break;
   case Stmt::OMPScopeDirectiveClass:
-    CGM.ErrorUnsupported(S, "scope with FE outlining");
+    EmitOMPScopeDirective(cast<OMPScopeDirective>(*S));
     break;
   case Stmt::OMPMaskedDirectiveClass:
     EmitOMPMaskedDirective(cast<OMPMaskedDirective>(*S));
@@ -454,6 +454,36 @@ void CodeGenFunction::EmitStmt(const Stmt *S, ArrayRef<const Attr *> Attrs) {
     break;
   case Stmt::OpenACCLoopConstructClass:
     EmitOpenACCLoopConstruct(cast<OpenACCLoopConstruct>(*S));
+    break;
+  case Stmt::OpenACCCombinedConstructClass:
+    EmitOpenACCCombinedConstruct(cast<OpenACCCombinedConstruct>(*S));
+    break;
+  case Stmt::OpenACCDataConstructClass:
+    EmitOpenACCDataConstruct(cast<OpenACCDataConstruct>(*S));
+    break;
+  case Stmt::OpenACCEnterDataConstructClass:
+    EmitOpenACCEnterDataConstruct(cast<OpenACCEnterDataConstruct>(*S));
+    break;
+  case Stmt::OpenACCExitDataConstructClass:
+    EmitOpenACCExitDataConstruct(cast<OpenACCExitDataConstruct>(*S));
+    break;
+  case Stmt::OpenACCHostDataConstructClass:
+    EmitOpenACCHostDataConstruct(cast<OpenACCHostDataConstruct>(*S));
+    break;
+  case Stmt::OpenACCWaitConstructClass:
+    EmitOpenACCWaitConstruct(cast<OpenACCWaitConstruct>(*S));
+    break;
+  case Stmt::OpenACCInitConstructClass:
+    EmitOpenACCInitConstruct(cast<OpenACCInitConstruct>(*S));
+    break;
+  case Stmt::OpenACCShutdownConstructClass:
+    EmitOpenACCShutdownConstruct(cast<OpenACCShutdownConstruct>(*S));
+    break;
+  case Stmt::OpenACCSetConstructClass:
+    EmitOpenACCSetConstruct(cast<OpenACCSetConstruct>(*S));
+    break;
+  case Stmt::OpenACCUpdateConstructClass:
+    EmitOpenACCUpdateConstruct(cast<OpenACCUpdateConstruct>(*S));
     break;
   }
 }
@@ -754,7 +784,7 @@ void CodeGenFunction::EmitAttributedStmt(const AttributedStmt &S) {
       const Expr *Assumption = cast<CXXAssumeAttr>(A)->getAssumption();
       if (getLangOpts().CXXAssumptions && Builder.GetInsertBlock() &&
           !Assumption->HasSideEffects(getContext())) {
-        llvm::Value *AssumptionVal = EvaluateExprAsBool(Assumption);
+        llvm::Value *AssumptionVal = EmitCheckedArgForAssume(Assumption);
         Builder.CreateAssumption(AssumptionVal);
       }
     } break;
@@ -801,10 +831,12 @@ void CodeGenFunction::EmitIndirectGotoStmt(const IndirectGotoStmt &S) {
 }
 
 void CodeGenFunction::EmitIfStmt(const IfStmt &S) {
+  const Stmt *Else = S.getElse();
+
   // The else branch of a consteval if statement is always the only branch that
   // can be runtime evaluated.
   if (S.isConsteval()) {
-    const Stmt *Executed = S.isNegatedConsteval() ? S.getThen() : S.getElse();
+    const Stmt *Executed = S.isNegatedConsteval() ? S.getThen() : Else;
     if (Executed) {
       RunCleanupsScope ExecutedScope(*this);
       EmitStmt(Executed);
@@ -815,6 +847,7 @@ void CodeGenFunction::EmitIfStmt(const IfStmt &S) {
   // C99 6.8.4.1: The first substatement is executed if the expression compares
   // unequal to 0.  The condition must be a scalar type.
   LexicalScope ConditionScope(*this, S.getCond()->getSourceRange());
+  ApplyDebugLocation DL(*this, S.getCond());
 
   if (S.getInit())
     EmitStmt(S.getInit());
@@ -829,8 +862,8 @@ void CodeGenFunction::EmitIfStmt(const IfStmt &S) {
                                    S.isConstexpr())) {
     // Figure out which block (then or else) is executed.
     const Stmt *Executed = S.getThen();
-    const Stmt *Skipped  = S.getElse();
-    if (!CondConstant)  // Condition false?
+    const Stmt *Skipped = Else;
+    if (!CondConstant) // Condition false?
       std::swap(Executed, Skipped);
 
     // If the skipped block has no labels in it, just emit the executed block.
@@ -851,7 +884,7 @@ void CodeGenFunction::EmitIfStmt(const IfStmt &S) {
   llvm::BasicBlock *ThenBlock = createBasicBlock("if.then");
   llvm::BasicBlock *ContBlock = createBasicBlock("if.end");
   llvm::BasicBlock *ElseBlock = ContBlock;
-  if (S.getElse())
+  if (Else)
     ElseBlock = createBasicBlock("if.else");
 
   // Prefer the PGO based weights over the likelihood attribute.
@@ -869,7 +902,7 @@ void CodeGenFunction::EmitIfStmt(const IfStmt &S) {
   uint64_t ThenCount = getProfileCount(S.getThen());
   if (!ThenCount && !getCurrentProfileCount() &&
       CGM.getCodeGenOpts().OptimizationLevel)
-    LH = Stmt::getLikelihood(S.getThen(), S.getElse());
+    LH = Stmt::getLikelihood(S.getThen(), Else);
 
   // When measuring MC/DC, always fully evaluate the condition up front using
   // EvaluateExprAsBool() so that the test vector bitmap can be updated prior to
@@ -897,7 +930,7 @@ void CodeGenFunction::EmitIfStmt(const IfStmt &S) {
   EmitBranch(ContBlock);
 
   // Emit the 'else' code if present.
-  if (const Stmt *Else = S.getElse()) {
+  if (Else) {
     {
       // There is no need to emit line number for an unconditional branch.
       auto NL = ApplyDebugLocation::CreateEmpty(*this);
@@ -997,8 +1030,8 @@ void CodeGenFunction::EmitWhileStmt(const WhileStmt &S,
   EmitBlock(LoopHeader.getBlock());
 
   if (CGM.shouldEmitConvergenceTokens())
-    ConvergenceTokenStack.push_back(emitConvergenceLoopToken(
-        LoopHeader.getBlock(), ConvergenceTokenStack.back()));
+    ConvergenceTokenStack.push_back(
+        emitConvergenceLoopToken(LoopHeader.getBlock()));
 
   // Create an exit block for when the condition fails, which will
   // also become the break target.
@@ -1125,8 +1158,7 @@ void CodeGenFunction::EmitDoStmt(const DoStmt &S,
     EmitBlockWithFallThrough(LoopBody, &S);
 
   if (CGM.shouldEmitConvergenceTokens())
-    ConvergenceTokenStack.push_back(
-        emitConvergenceLoopToken(LoopBody, ConvergenceTokenStack.back()));
+    ConvergenceTokenStack.push_back(emitConvergenceLoopToken(LoopBody));
 
   {
     RunCleanupsScope BodyScope(*this);
@@ -1204,8 +1236,7 @@ void CodeGenFunction::EmitForStmt(const ForStmt &S,
   EmitBlock(CondBlock);
 
   if (CGM.shouldEmitConvergenceTokens())
-    ConvergenceTokenStack.push_back(
-        emitConvergenceLoopToken(CondBlock, ConvergenceTokenStack.back()));
+    ConvergenceTokenStack.push_back(emitConvergenceLoopToken(CondBlock));
 
   const SourceRange &R = S.getSourceRange();
   LoopStack.push(CondBlock, CGM.getContext(), CGM.getCodeGenOpts(), ForAttrs,
@@ -1342,8 +1373,7 @@ CodeGenFunction::EmitCXXForRangeStmt(const CXXForRangeStmt &S,
   EmitBlock(CondBlock);
 
   if (CGM.shouldEmitConvergenceTokens())
-    ConvergenceTokenStack.push_back(
-        emitConvergenceLoopToken(CondBlock, ConvergenceTokenStack.back()));
+    ConvergenceTokenStack.push_back(emitConvergenceLoopToken(CondBlock));
 
   const SourceRange &R = S.getSourceRange();
   LoopStack.push(CondBlock, CGM.getContext(), CGM.getCodeGenOpts(), ForAttrs,
@@ -3218,35 +3248,32 @@ CodeGenFunction::GenerateCapturedStmtFunction(const CapturedStmt &S) {
   return F;
 }
 
-namespace {
 // Returns the first convergence entry/loop/anchor instruction found in |BB|.
 // std::nullptr otherwise.
-llvm::IntrinsicInst *getConvergenceToken(llvm::BasicBlock *BB) {
+static llvm::ConvergenceControlInst *getConvergenceToken(llvm::BasicBlock *BB) {
   for (auto &I : *BB) {
-    auto *II = dyn_cast<llvm::IntrinsicInst>(&I);
-    if (II && llvm::isConvergenceControlIntrinsic(II->getIntrinsicID()))
-      return II;
+    if (auto *CI = dyn_cast<llvm::ConvergenceControlInst>(&I))
+      return CI;
   }
   return nullptr;
 }
 
-} // namespace
-
 llvm::CallBase *
-CodeGenFunction::addConvergenceControlToken(llvm::CallBase *Input,
-                                            llvm::Value *ParentToken) {
+CodeGenFunction::addConvergenceControlToken(llvm::CallBase *Input) {
+  llvm::ConvergenceControlInst *ParentToken = ConvergenceTokenStack.back();
+  assert(ParentToken);
+
   llvm::Value *bundleArgs[] = {ParentToken};
   llvm::OperandBundleDef OB("convergencectrl", bundleArgs);
-  auto Output = llvm::CallBase::addOperandBundle(
+  auto *Output = llvm::CallBase::addOperandBundle(
       Input, llvm::LLVMContext::OB_convergencectrl, OB, Input->getIterator());
   Input->replaceAllUsesWith(Output);
   Input->eraseFromParent();
   return Output;
 }
 
-llvm::IntrinsicInst *
-CodeGenFunction::emitConvergenceLoopToken(llvm::BasicBlock *BB,
-                                          llvm::Value *ParentToken) {
+llvm::ConvergenceControlInst *
+CodeGenFunction::emitConvergenceLoopToken(llvm::BasicBlock *BB) {
   CGBuilderTy::InsertPoint IP = Builder.saveIP();
   if (BB->empty())
     Builder.SetInsertPoint(BB);
@@ -3257,14 +3284,14 @@ CodeGenFunction::emitConvergenceLoopToken(llvm::BasicBlock *BB,
       llvm::Intrinsic::experimental_convergence_loop, {}, {});
   Builder.restoreIP(IP);
 
-  llvm::CallBase *I = addConvergenceControlToken(CB, ParentToken);
-  return cast<llvm::IntrinsicInst>(I);
+  CB = addConvergenceControlToken(CB);
+  return cast<llvm::ConvergenceControlInst>(CB);
 }
 
-llvm::IntrinsicInst *
+llvm::ConvergenceControlInst *
 CodeGenFunction::getOrEmitConvergenceEntryToken(llvm::Function *F) {
   llvm::BasicBlock *BB = &F->getEntryBlock();
-  llvm::IntrinsicInst *Token = getConvergenceToken(BB);
+  llvm::ConvergenceControlInst *Token = getConvergenceToken(BB);
   if (Token)
     return Token;
 
@@ -3279,5 +3306,5 @@ CodeGenFunction::getOrEmitConvergenceEntryToken(llvm::Function *F) {
   assert(isa<llvm::IntrinsicInst>(I));
   Builder.restoreIP(IP);
 
-  return cast<llvm::IntrinsicInst>(I);
+  return cast<llvm::ConvergenceControlInst>(I);
 }

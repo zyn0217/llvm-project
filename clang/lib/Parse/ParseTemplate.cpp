@@ -13,7 +13,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/ExprCXX.h"
-#include "clang/Parse/ParseDiagnostic.h"
+#include "clang/Basic/DiagnosticParse.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/DeclSpec.h"
@@ -339,6 +339,8 @@ Parser::ParseConceptDefinition(const ParsedTemplateInfo &TemplateInfo,
   if (!TryConsumeToken(tok::equal)) {
     Diag(Tok.getLocation(), diag::err_expected) << tok::equal;
     SkipUntil(tok::semi);
+    if (D)
+      D->setInvalidDecl();
     return nullptr;
   }
 
@@ -346,6 +348,8 @@ Parser::ParseConceptDefinition(const ParsedTemplateInfo &TemplateInfo,
       Actions.CorrectDelayedTyposInExpr(ParseConstraintExpression());
   if (ConstraintExprResult.isInvalid()) {
     SkipUntil(tok::semi);
+    if (D)
+      D->setInvalidDecl();
     return nullptr;
   }
 
