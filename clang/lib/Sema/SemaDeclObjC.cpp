@@ -4753,7 +4753,8 @@ ParmVarDecl *SemaObjC::ActOnMethodParmDeclaration(Scope *S,
   // method too.
   ParmVarDecl *Param = SemaRef.CheckParameter(
       Context.getTranslationUnitDecl(), StartLoc, ArgInfo.NameLoc, ArgInfo.Name,
-      ArgType, DI, SC_None);
+      // FIXME: Incorrect template depth
+      ArgType, DI, SC_None, /*TemplateDepth=*/0);
   Param->setObjCMethodScopeInfo(ParamIndex);
   Param->setObjCDeclQualifier(
       CvtQTToAstBitMask(ArgInfo.DeclSpec.getObjCDeclQualifier()));

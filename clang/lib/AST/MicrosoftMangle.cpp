@@ -3632,6 +3632,13 @@ void MicrosoftCXXNameMangler::mangleType(const TemplateSpecializationType *T,
 
 void MicrosoftCXXNameMangler::mangleType(const DependentNameType *T, Qualifiers,
                                          SourceRange Range) {
+  // Out << '?';
+  // std::string Name;
+  // llvm::raw_string_ostream OS(Name);
+  // OS << "<DNT_";
+  // OS << T;
+  // OS << ">";
+  // mangleSourceName(Name);
   Error(Range.getBegin(), "dependent name type") << Range;
 }
 

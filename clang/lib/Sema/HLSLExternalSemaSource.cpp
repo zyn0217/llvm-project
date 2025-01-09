@@ -544,7 +544,7 @@ private:
           AST, Method->getDeclContext(), SourceLocation(), SourceLocation(),
           &MP.NameII, MP.Ty,
           AST.getTrivialTypeSourceInfo(MP.Ty, SourceLocation()), SC_None,
-          nullptr);
+          nullptr, /*TemplateDepth=*/Method->getTemplateDepth());
       if (MP.Modifier != HLSLParamModifierAttr::Keyword_in) {
         auto *Mod =
             HLSLParamModifierAttr::Create(AST, SourceRange(), MP.Modifier);
