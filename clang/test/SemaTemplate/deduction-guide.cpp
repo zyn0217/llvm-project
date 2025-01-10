@@ -234,13 +234,8 @@ F s(0);
 // CHECK: | `-CXXBoolLiteralExpr {{.*}} 'bool' false
 // CHECK: |-CXXDeductionGuideDecl {{.*}} implicit <deduction guide for F> 'auto (U) -> F<value-parameter-0-0>'
 // CHECK: | `-ParmVarDecl {{.*}} 'U'
-// CHECK: `-CXXDeductionGuideDecl {{.*}} implicit <deduction guide for F> 'auto (int) -> F<>'
-// CHECK:   |-TemplateArgument integral ''x''
-// CHECK:   |-TemplateArgument type 'int'
-// CHECK:   | `-BuiltinType {{.*}} 'int'
-// CHECK:   `-ParmVarDecl {{.*}} 'int'
-// CHECK: FunctionProtoType {{.*}} 'auto (U) -> F<value-parameter-0-0>' dependent trailing_return cdecl
-// CHECK: |-InjectedClassNameType {{.*}} 'F<value-parameter-0-0>' dependent
+// CHECK: FunctionProtoType {{.*}} 'auto (U) -> F<>' dependent trailing_return cdecl
+// CHECK: |-InjectedClassNameType {{.*}} 'F<>' dependent
 // CHECK: | `-CXXRecord {{.*}} 'F'
 // CHECK: `-TemplateTypeParmType {{.*}} 'U' dependent depth 0 index 1
 
