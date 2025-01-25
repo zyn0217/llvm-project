@@ -75,3 +75,15 @@ int i = f(p);
 
 }
 
+namespace Example5 {
+
+template<typename T>
+decltype([] { return T::x;}) f(T); // #1
+void f(int) {} // #2
+
+int main() {
+  f(0);
+}
+
+}
+
