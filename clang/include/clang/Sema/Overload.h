@@ -935,6 +935,28 @@ class Sema;
     /// allowed?
     bool HasMatchedPackOnParmToNonPackOnArg : 1;
 
+    bool IsFunctionTemplate : 1;
+
+    bool PartialOverloading : 1;
+
+    bool AggregateCandidateDeduction : 1;
+
+    bool SuppressUserConversions : 1;
+
+    bool AllowExplicit : 1;
+
+    OverloadCandidateParamOrder PO : 1;
+
+    TemplateArgumentListInfo *ExplicitTemplateArgs;
+
+    SmallVector<Expr *> Args;
+
+    CXXRecordDecl *ActingContext;
+
+    Expr::Classification ObjectClassification;
+
+    QualType ObjectType;
+
     /// True if the candidate was found using ADL.
     LLVM_PREFERRED_TYPE(CallExpr::ADLCallKind)
     unsigned IsADLCandidate : 1;
@@ -1011,7 +1033,11 @@ class Sema;
     OverloadCandidate()
         : IsSurrogate(false), IgnoreObjectArgument(false),
           TookAddressOfOverload(false),
-          HasMatchedPackOnParmToNonPackOnArg(false),
+          HasMatchedPackOnParmToNonPackOnArg(false), IsFunctionTemplate(false),
+          PartialOverloading(false), AggregateCandidateDeduction(false),
+          SuppressUserConversions(false), AllowExplicit(false),
+          PO(OverloadCandidateParamOrder::Normal),
+          ExplicitTemplateArgs(nullptr), ActingContext(nullptr),
           IsADLCandidate(llvm::to_underlying(CallExpr::NotADL)),
           RewriteKind(CRK_None) {}
   };

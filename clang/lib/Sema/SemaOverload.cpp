@@ -6918,12 +6918,15 @@ void Sema::AddOverloadCandidate(
     bool PartialOverloading, bool AllowExplicit, bool AllowExplicitConversions,
     ADLCallKind IsADLCandidate, ConversionSequenceList EarlyConversions,
     OverloadCandidateParamOrder PO, bool AggregateCandidateDeduction,
-    bool HasMatchedPackOnParmToNonPackOnArg) {
-  const FunctionProtoType *Proto
-    = dyn_cast<FunctionProtoType>(Function->getType()->getAs<FunctionType>());
+    bool HasMatchedPackOnParmToNonPackOnArg,
+    TemplateArgumentListInfo *ExplicitTemplateArgs) {
+  const FunctionProtoType *Proto =
+      dyn_cast<FunctionProtoType>(Function->getType()->getAs<FunctionType>());
   assert(Proto && "Functions without a prototype cannot be overloaded");
+#if 0
   assert(!Function->getDescribedFunctionTemplate() &&
          "Use AddTemplateOverloadCandidate for function templates");
+#endif
 
   if (CXXMethodDecl *Method = dyn_cast<CXXMethodDecl>(Function)) {
     if (!isa<CXXConstructorDecl>(Method)) {
@@ -6983,6 +6986,16 @@ void Sema::AddOverloadCandidate(
   Candidate.ExplicitCallArguments = Args.size();
   Candidate.HasMatchedPackOnParmToNonPackOnArg =
       HasMatchedPackOnParmToNonPackOnArg;
+  Candidate.IsFunctionTemplate = Function->getDescribedFunctionTemplate();
+  if (Candidate.IsFunctionTemplate) {
+    Candidate.ExplicitTemplateArgs = ExplicitTemplateArgs;
+    Candidate.Args = {Args.begin(), Args.end()};
+    Candidate.PartialOverloading = PartialOverloading;
+    Candidate.AggregateCandidateDeduction = AggregateCandidateDeduction;
+    Candidate.SuppressUserConversions = SuppressUserConversions;
+    Candidate.PO = PO;
+    return;
+  }
 
   // Explicit functions are not actually candidates at all if we're not
   // allowing them in this context, but keep them around so we can point
@@ -7554,7 +7567,8 @@ void Sema::AddMethodCandidate(
     Expr::Classification ObjectClassification, ArrayRef<Expr *> Args,
     OverloadCandidateSet &CandidateSet, bool SuppressUserConversions,
     bool PartialOverloading, ConversionSequenceList EarlyConversions,
-    OverloadCandidateParamOrder PO, bool HasMatchedPackOnParmToNonPackOnArg) {
+    OverloadCandidateParamOrder PO, bool HasMatchedPackOnParmToNonPackOnArg,
+    TemplateArgumentListInfo *ExplicitTemplateArgs) {
   const FunctionProtoType *Proto
     = dyn_cast<FunctionProtoType>(Method->getType()->getAs<FunctionType>());
   assert(Proto && "Methods without a prototype cannot be overloaded");
@@ -7587,6 +7601,20 @@ void Sema::AddMethodCandidate(
   Candidate.ExplicitCallArguments = Args.size();
   Candidate.HasMatchedPackOnParmToNonPackOnArg =
       HasMatchedPackOnParmToNonPackOnArg;
+
+  Candidate.IsFunctionTemplate = Method->getDescribedFunctionTemplate();
+  if (Candidate.IsFunctionTemplate) {
+    Candidate.ActingContext = ActingContext;
+    Candidate.ObjectClassification = ObjectClassification;
+    Candidate.ExplicitTemplateArgs = ExplicitTemplateArgs;
+    Candidate.Args = {Args.begin(), Args.end()};
+    Candidate.PartialOverloading = PartialOverloading;
+    Candidate.AggregateCandidateDeduction = false;
+    Candidate.ObjectType = ObjectType;
+    Candidate.SuppressUserConversions = SuppressUserConversions;
+    Candidate.PO = PO;
+    return;
+  }
 
   bool IgnoreExplicitObject =
       (Method->isExplicitObjectMemberFunction() &&
@@ -7743,6 +7771,7 @@ void Sema::AddMethodTemplateCandidate(
   if (!CandidateSet.isNewCandidate(MethodTmpl, PO))
     return;
 
+#if 0
   // C++ [over.match.funcs]p7:
   //   In each case where a candidate is a function template, candidate
   //   function template specializations are generated using template argument
@@ -7796,8 +7825,14 @@ void Sema::AddMethodTemplateCandidate(
   AddMethodCandidate(cast<CXXMethodDecl>(Specialization), FoundDecl,
                      ActingContext, ObjectType, ObjectClassification, Args,
                      CandidateSet, SuppressUserConversions, PartialOverloading,
-                     Conversions, PO,
-                     Info.hasMatchedPackOnParmToNonPackOnArg());
+                     Conversions, PO, Info.hasMatchedPackOnParmToNonPackOnArg());
+#endif
+  AddMethodCandidate(
+      cast<CXXMethodDecl>(MethodTmpl->getTemplatedDecl()), FoundDecl,
+      ActingContext, ObjectType, ObjectClassification, Args, CandidateSet,
+      SuppressUserConversions, PartialOverloading,
+      /*Conversions=*/{}, PO, /*HasMatchedPackOnParmToNonPackOnArg=*/false,
+      ExplicitTemplateArgs);
 }
 
 /// Determine whether a given function template has a simple explicit specifier
@@ -7827,6 +7862,7 @@ void Sema::AddTemplateOverloadCandidate(
     return;
   }
 
+#if 0
   // C++ [over.match.funcs]p7:
   //   In each case where a candidate is a function template, candidate
   //   function template specializations are generated using template argument
@@ -7877,16 +7913,24 @@ void Sema::AddTemplateOverloadCandidate(
     }
     return;
   }
+#endif
 
   // Add the function template specialization produced by template argument
   // deduction as a candidate.
+#if 0
   assert(Specialization && "Missing function template specialization?");
   AddOverloadCandidate(
       Specialization, FoundDecl, Args, CandidateSet, SuppressUserConversions,
       PartialOverloading, AllowExplicit,
       /*AllowExplicitConversions=*/false, IsADLCandidate, Conversions, PO,
-      Info.AggregateDeductionCandidateHasMismatchedArity,
-      Info.hasMatchedPackOnParmToNonPackOnArg());
+      Info.AggregateDeductionCandidateHasMismatchedArity, Info.hasMatchedPackOnParmToNonPackOnArg());
+#endif
+  AddOverloadCandidate(
+      FunctionTemplate->getTemplatedDecl(), FoundDecl, Args, CandidateSet,
+      SuppressUserConversions, PartialOverloading, AllowExplicit,
+      /*AllowExplicitConversions=*/false, IsADLCandidate,
+      /*EarlyConversions=*/{}, PO, AggregateCandidateDeduction,
+      /*HasMatchedPackOnParmToNonPackOnArg=*/false, ExplicitTemplateArgs);
 }
 
 bool Sema::CheckNonDependentConversions(
@@ -10903,9 +10947,150 @@ bool OverloadCandidate::NotValidBecauseConstraintExprHasError() const {
 OverloadingResult
 OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
                                          iterator &Best) {
+  llvm::SmallVector<OverloadCandidate *, 16> Candidates(llvm::make_filter_range(
+      llvm::map_range(llvm::make_range(begin(), end()),
+                      [](OverloadCandidate &Cand) { return &Cand; }),
+      [](OverloadCandidate *Cand) { return !Cand->IsFunctionTemplate; }));
+#if 0
   llvm::SmallVector<OverloadCandidate *, 16> Candidates;
   std::transform(begin(), end(), std::back_inserter(Candidates),
                  [](OverloadCandidate &Cand) { return &Cand; });
+#endif
+
+  auto ResolveFunctionTemplates = [&](OverloadingResult Result) {
+    if (Result == OR_Success || Result == OR_Ambiguous)
+      return Result;
+
+    llvm::SmallVector<OverloadCandidate *, 16> Candidates(
+        llvm::map_range(llvm::make_range(begin(), end()),
+                        [](OverloadCandidate &Cand) { return &Cand; }));
+
+    unsigned AddedTemplates = 0;
+    for (auto *Candidate : Candidates) {
+      if (!Candidate->IsFunctionTemplate)
+        continue;
+      if (!Candidate->Viable)
+        continue;
+      Candidate->Viable = false;
+      ++AddedTemplates;
+      FunctionTemplateDecl *FunctionTemplate =
+          Candidate->Function->getDescribedFunctionTemplate();
+
+      if (isa<CXXMethodDecl>(Candidate->Function)) {
+        TemplateDeductionInfo Info(getLocation());
+        FunctionDecl *Specialization = nullptr;
+        ConversionSequenceList Conversions;
+        if (TemplateDeductionResult Result = S.DeduceTemplateArguments(
+                FunctionTemplate, Candidate->ExplicitTemplateArgs,
+                Candidate->Args, Specialization, Info,
+                Candidate->PartialOverloading,
+                /*AggregateDeductionCandidate=*/false, /*PartialOrdering=*/false, 
+                Candidate->ObjectType,
+                Candidate->ObjectClassification,
+                [&](ArrayRef<QualType> ParamTypes, bool NonInstOnly) {
+                  return S.CheckNonDependentConversions(
+                      FunctionTemplate, ParamTypes, Candidate->Args, *this,
+                      Conversions, Candidate->SuppressUserConversions,
+                      NonInstOnly, Candidate->ActingContext,
+                      Candidate->ObjectType, Candidate->ObjectClassification,
+                      Candidate->PO);
+                });
+            Result != TemplateDeductionResult::Success) {
+          OverloadCandidate &NewCandidate =
+              addCandidate(Conversions.size(), Conversions);
+          NewCandidate.FoundDecl = Candidate->FoundDecl;
+          NewCandidate.Function = FunctionTemplate->getTemplatedDecl();
+          NewCandidate.Viable = false;
+          NewCandidate.RewriteKind = getRewriteInfo().getRewriteKind(
+              NewCandidate.Function, Candidate->PO);
+          NewCandidate.IsSurrogate = false;
+          NewCandidate.IgnoreObjectArgument =
+              cast<CXXMethodDecl>(NewCandidate.Function)->isStatic() ||
+              Candidate->ObjectType.isNull();
+          NewCandidate.ExplicitCallArguments = Candidate->Args.size();
+          if (Result == TemplateDeductionResult::NonDependentConversionFailure)
+            NewCandidate.FailureKind = ovl_fail_bad_conversion;
+          else {
+            NewCandidate.FailureKind = ovl_fail_bad_deduction;
+            NewCandidate.DeductionFailure =
+                MakeDeductionFailureInfo(S.Context, Result, Info);
+          }
+          continue;
+        }
+
+        // Add the function template specialization produced by template
+        // argument deduction as a candidate.
+        assert(Specialization &&
+               "Missing member function template specialization?");
+        assert(isa<CXXMethodDecl>(Specialization) &&
+               "Specialization is not a member function?");
+        S.AddMethodCandidate(
+            cast<CXXMethodDecl>(Specialization), Candidate->FoundDecl,
+            Candidate->ActingContext, Candidate->ObjectType,
+            Candidate->ObjectClassification, Candidate->Args, *this,
+            Candidate->SuppressUserConversions, Candidate->PartialOverloading,
+            Conversions, Candidate->PO,
+            Info.hasMatchedPackOnParmToNonPackOnArg());
+        continue;
+      }
+
+      TemplateDeductionInfo Info(getLocation(),
+                                 FunctionTemplate->getTemplateDepth());
+      FunctionDecl *Specialization = nullptr;
+      ConversionSequenceList Conversions;
+      if (TemplateDeductionResult Result = S.DeduceTemplateArguments(
+              FunctionTemplate, Candidate->ExplicitTemplateArgs,
+              Candidate->Args, Specialization, Info,
+              Candidate->PartialOverloading,
+              Candidate->AggregateCandidateDeduction,
+              /*PartialOrdering=*/false,
+              /*ObjectType=*/QualType(),
+              /*ObjectClassification=*/Expr::Classification(),
+              [&](ArrayRef<QualType> ParamTypes, bool NonInstOnly) {
+                return S.CheckNonDependentConversions(
+                    FunctionTemplate, ParamTypes, Candidate->Args, *this,
+                    Conversions, Candidate->SuppressUserConversions,
+                    NonInstOnly, nullptr, QualType(), {}, Candidate->PO);
+              });
+          Result != TemplateDeductionResult::Success) {
+        OverloadCandidate &NewCandidate =
+            addCandidate(Conversions.size(), Conversions);
+        NewCandidate.FoundDecl = Candidate->FoundDecl;
+        NewCandidate.Function = FunctionTemplate->getTemplatedDecl();
+        NewCandidate.Viable = false;
+        NewCandidate.RewriteKind =
+            getRewriteInfo().getRewriteKind(NewCandidate.Function, NewCandidate.PO);
+        NewCandidate.IsSurrogate = false;
+        NewCandidate.IsADLCandidate = Candidate->IsADLCandidate;
+        // Ignore the object argument if there is one, since we don't have an
+        // object type.
+        NewCandidate.IgnoreObjectArgument =
+            isa<CXXMethodDecl>(NewCandidate.Function) &&
+            !isa<CXXConstructorDecl>(NewCandidate.Function);
+        NewCandidate.ExplicitCallArguments = Candidate->Args.size();
+        if (Result == TemplateDeductionResult::NonDependentConversionFailure)
+          NewCandidate.FailureKind = ovl_fail_bad_conversion;
+        else {
+          NewCandidate.FailureKind = ovl_fail_bad_deduction;
+          NewCandidate.DeductionFailure =
+              MakeDeductionFailureInfo(S.Context, Result, Info);
+        }
+        Candidate->Viable = false;
+        continue;
+      }
+      assert(Specialization && "Missing function template specialization?");
+      S.AddOverloadCandidate(
+          Specialization, Candidate->FoundDecl, Candidate->Args, *this,
+          Candidate->SuppressUserConversions, Candidate->PartialOverloading,
+          Candidate->AllowExplicit,
+          /*AllowExplicitConversions=*/false,
+          static_cast<CallExpr::ADLCallKind>(Candidate->IsADLCandidate),
+          Conversions, Candidate->PO,
+          Info.AggregateDeductionCandidateHasMismatchedArity,
+          Info.hasMatchedPackOnParmToNonPackOnArg());
+    }
+    return AddedTemplates ? BestViableFunction(S, Loc, Best) : Result;
+  };
 
   // [CUDA] HD->H or HD->D calls are technically not allowed by CUDA but
   // are accepted by both clang and NVCC. However, during a particular
@@ -10952,13 +11137,13 @@ OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
       // back onto a potentially unintended candidate (made worse by
       // subsuming constraints), treat this as 'no viable candidate'.
       Best = end();
-      return OR_No_Viable_Function;
+      return ResolveFunctionTemplates(OR_No_Viable_Function);
     }
   }
 
   // If we didn't find any viable functions, abort.
   if (Best == end())
-    return OR_No_Viable_Function;
+    return ResolveFunctionTemplates(OR_No_Viable_Function);
 
   llvm::SmallVector<const NamedDecl *, 4> EquivalentCands;
 
@@ -10987,16 +11172,16 @@ OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
 
   // If we found more than one best candidate, this is ambiguous.
   if (Best == end())
-    return OR_Ambiguous;
+    return ResolveFunctionTemplates(OR_Ambiguous);
 
   // Best is the best viable function.
   if (Best->Function && Best->Function->isDeleted())
-    return OR_Deleted;
+    return ResolveFunctionTemplates(OR_Deleted);
 
   if (auto *M = dyn_cast_or_null<CXXMethodDecl>(Best->Function);
       Kind == CSK_AddressOfOverloadSet && M &&
       M->isImplicitObjectMemberFunction()) {
-    return OR_No_Viable_Function;
+    return ResolveFunctionTemplates(OR_No_Viable_Function);
   }
 
   if (!EquivalentCands.empty())

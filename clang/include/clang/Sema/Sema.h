@@ -10160,18 +10160,17 @@ public:
   /// \param PartialOverloading true if we are performing "partial" overloading
   /// based on an incomplete set of function arguments. This feature is used by
   /// code completion.
-  void AddOverloadCandidate(FunctionDecl *Function, DeclAccessPair FoundDecl,
-                            ArrayRef<Expr *> Args,
-                            OverloadCandidateSet &CandidateSet,
-                            bool SuppressUserConversions = false,
-                            bool PartialOverloading = false,
-                            bool AllowExplicit = true,
-                            bool AllowExplicitConversion = false,
-                            ADLCallKind IsADLCandidate = ADLCallKind::NotADL,
-                            ConversionSequenceList EarlyConversions = {},
-                            OverloadCandidateParamOrder PO = {},
-                            bool AggregateCandidateDeduction = false,
-                            bool HasMatchedPackOnParmToNonPackOnArg = false);
+  void AddOverloadCandidate(
+      FunctionDecl *Function, DeclAccessPair FoundDecl, ArrayRef<Expr *> Args,
+      OverloadCandidateSet &CandidateSet, bool SuppressUserConversions = false,
+      bool PartialOverloading = false, bool AllowExplicit = true,
+      bool AllowExplicitConversion = false,
+      ADLCallKind IsADLCandidate = ADLCallKind::NotADL,
+      ConversionSequenceList EarlyConversions = {},
+      OverloadCandidateParamOrder PO = {},
+      bool AggregateCandidateDeduction = false,
+      bool HasMatchedPackOnParmToNonPackOnArg = false,
+      TemplateArgumentListInfo *ExplicitTemplateArgs = nullptr);
 
   /// Add all of the function declarations in the given function set to
   /// the overload candidate set.
@@ -10198,16 +10197,17 @@ public:
   /// both @c a1 and @c a2. If @p SuppressUserConversions, then don't
   /// allow user-defined conversions via constructors or conversion
   /// operators.
-  void AddMethodCandidate(CXXMethodDecl *Method, DeclAccessPair FoundDecl,
-                          CXXRecordDecl *ActingContext, QualType ObjectType,
-                          Expr::Classification ObjectClassification,
-                          ArrayRef<Expr *> Args,
-                          OverloadCandidateSet &CandidateSet,
-                          bool SuppressUserConversions = false,
-                          bool PartialOverloading = false,
-                          ConversionSequenceList EarlyConversions = {},
-                          OverloadCandidateParamOrder PO = {},
-                          bool HasMatchedPackOnParmToNonPackOnArg = false);
+  void
+  AddMethodCandidate(CXXMethodDecl *Method, DeclAccessPair FoundDecl,
+                     CXXRecordDecl *ActingContext, QualType ObjectType,
+                     Expr::Classification ObjectClassification,
+                     ArrayRef<Expr *> Args, OverloadCandidateSet &CandidateSet,
+                     bool SuppressUserConversions = false,
+                     bool PartialOverloading = false,
+                     ConversionSequenceList EarlyConversions = {},
+                     OverloadCandidateParamOrder PO = {},
+                     bool HasMatchedPackOnParmToNonPackOnArg = false,
+                     TemplateArgumentListInfo *ExplicitTemplateArgs = nullptr);
 
   /// Add a C++ member function template as a candidate to the candidate
   /// set, using template argument deduction to produce an appropriate member
