@@ -6988,7 +6988,8 @@ void Sema::AddOverloadCandidate(
       HasMatchedPackOnParmToNonPackOnArg;
   Candidate.IsFunctionTemplate = Function->getDescribedFunctionTemplate();
   if (Candidate.IsFunctionTemplate) {
-    Candidate.ExplicitTemplateArgs = ExplicitTemplateArgs;
+    if (ExplicitTemplateArgs)
+      Candidate.ExplicitTemplateArgs = *ExplicitTemplateArgs;
     Candidate.Args = {Args.begin(), Args.end()};
     Candidate.PartialOverloading = PartialOverloading;
     Candidate.AggregateCandidateDeduction = AggregateCandidateDeduction;
@@ -7606,7 +7607,8 @@ void Sema::AddMethodCandidate(
   if (Candidate.IsFunctionTemplate) {
     Candidate.ActingContext = ActingContext;
     Candidate.ObjectClassification = ObjectClassification;
-    Candidate.ExplicitTemplateArgs = ExplicitTemplateArgs;
+    if (ExplicitTemplateArgs)
+      Candidate.ExplicitTemplateArgs = *ExplicitTemplateArgs;
     Candidate.Args = {Args.begin(), Args.end()};
     Candidate.PartialOverloading = PartialOverloading;
     Candidate.AggregateCandidateDeduction = false;
@@ -10981,7 +10983,7 @@ OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
         FunctionDecl *Specialization = nullptr;
         ConversionSequenceList Conversions;
         if (TemplateDeductionResult Result = S.DeduceTemplateArguments(
-                FunctionTemplate, Candidate->ExplicitTemplateArgs,
+                FunctionTemplate, &Candidate->ExplicitTemplateArgs,
                 Candidate->Args, Specialization, Info,
                 Candidate->PartialOverloading,
                 /*AggregateDeductionCandidate=*/false, /*PartialOrdering=*/false, 
@@ -11039,7 +11041,7 @@ OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
       FunctionDecl *Specialization = nullptr;
       ConversionSequenceList Conversions;
       if (TemplateDeductionResult Result = S.DeduceTemplateArguments(
-              FunctionTemplate, Candidate->ExplicitTemplateArgs,
+              FunctionTemplate, &Candidate->ExplicitTemplateArgs,
               Candidate->Args, Specialization, Info,
               Candidate->PartialOverloading,
               Candidate->AggregateCandidateDeduction,

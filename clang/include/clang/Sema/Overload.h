@@ -947,7 +947,7 @@ class Sema;
 
     OverloadCandidateParamOrder PO : 1;
 
-    TemplateArgumentListInfo *ExplicitTemplateArgs;
+    TemplateArgumentListInfo ExplicitTemplateArgs;
 
     SmallVector<Expr *> Args;
 
@@ -1037,7 +1037,7 @@ class Sema;
           PartialOverloading(false), AggregateCandidateDeduction(false),
           SuppressUserConversions(false), AllowExplicit(false),
           PO(OverloadCandidateParamOrder::Normal),
-          ExplicitTemplateArgs(nullptr), ActingContext(nullptr),
+          ExplicitTemplateArgs(), ActingContext(nullptr),
           IsADLCandidate(llvm::to_underlying(CallExpr::NotADL)),
           RewriteKind(CRK_None) {}
   };

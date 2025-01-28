@@ -37,8 +37,10 @@ void foo() {
 namespace Example3 {
 
 template <class Tp>
-concept C = requires(Tp t) { f(t); }; // expected-note {{while substituting template arguments into constraint expression here}} \
-                                      // expected-note {{in instantiation of requirement here}}
+concept C = requires(Tp t) { f(t); }; // expected-note {{while checking constraint satisfaction for template}} \
+                                      // expected-note {{while substituting deduced template arguments into function template 'f'}} \
+                                      // expected-note {{in instantiation of requirement here}} \
+                                      // expected-note {{while substituting template arguments into constraint expression here}}
 
 struct S {};
 
@@ -49,12 +51,12 @@ template <class T>
   requires C<T> // expected-error {{constraint 'C<T>' depends on itself}} \
                 // expected-note {{while checking the satisfaction of concept 'C<Example3::S>'}} \
                 // expected-note 2{{while substituting template arguments into constraint}}
-auto f(T); // expected-note 2{{while substituting deduced template arguments into function template}} \
-           // expected-note 2{{while checking constraint satisfaction for template}} \
-           // expected-note {{candidate template ignored: constraints not satisfied}}
+auto f(T);  // expected-note {{candidate template ignored: constraints not satisfied}}
 
 S p;
-int i = f(p); // expected-error {{no matching function for call to 'f'}}
+int i = f(p); // expected-error {{no matching function for call to 'f'}} \
+              // expected-note {{while checking constraint satisfaction for template}} \
+              // expected-note {{while substituting deduced template arguments into function template}}
 
 }
 
