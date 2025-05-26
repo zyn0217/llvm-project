@@ -2201,6 +2201,14 @@ StmtProfiler::VisitUnresolvedLookupExpr(const UnresolvedLookupExpr *S) {
   VisitOverloadExpr(S);
 }
 
+void StmtProfiler::VisitUnresolvedTemplateExpr(const UnresolvedTemplateExpr *S) {
+  VisitExpr(S);
+  VisitDecl(S->getDecl());
+  ID.AddBoolean(S->hasExplicitTemplateArgs());
+  if (S->hasExplicitTemplateArgs())
+    VisitTemplateArguments(S->getTemplateArgs(), S->getNumTemplateArgs());
+}
+
 void StmtProfiler::VisitTypeTraitExpr(const TypeTraitExpr *S) {
   VisitExpr(S);
   ID.AddInteger(S->getTrait());

@@ -5261,6 +5261,15 @@ recurse:
     break;
   }
 
+  case Expr::UnresolvedTemplateExprClass: {
+    NotPrimaryExpr();
+    const UnresolvedTemplateExpr *ULE = cast<UnresolvedTemplateExpr>(E);
+    mangleUnresolvedName(ULE->getQualifier(), ULE->getDeclName(),
+                         ULE->getTemplateArgs(), ULE->getNumTemplateArgs(),
+                         Arity);
+    break;
+  }
+
   case Expr::CXXUnresolvedConstructExprClass: {
     NotPrimaryExpr();
     const CXXUnresolvedConstructExpr *CE = cast<CXXUnresolvedConstructExpr>(E);

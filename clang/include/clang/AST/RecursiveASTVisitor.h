@@ -2524,6 +2524,15 @@ DEF_TRAVERSE_STMT(DependentScopeDeclRefExpr, {
   }
 })
 
+DEF_TRAVERSE_STMT(UnresolvedTemplateExpr, {
+  TRY_TO(TraverseNestedNameSpecifierLoc(S->getQualifierLoc()));
+  TRY_TO(TraverseDeclarationNameInfo(S->getNameInfo()));
+  if (S->hasExplicitTemplateArgs()) {
+    TRY_TO(TraverseTemplateArgumentLocsHelper(S->getTemplateArgs(),
+                                              S->getNumTemplateArgs()));
+  }
+})
+
 DEF_TRAVERSE_STMT(MemberExpr, {
   TRY_TO(TraverseNestedNameSpecifierLoc(S->getQualifierLoc()));
   TRY_TO(TraverseDeclarationNameInfo(S->getMemberNameInfo()));

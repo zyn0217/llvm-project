@@ -828,6 +828,25 @@ ExprDependence clang::computeDependence(DependentScopeDeclRefExpr *E) {
   return D;
 }
 
+ExprDependence
+clang::computeDependence(UnresolvedTemplateExpr *E) {
+  auto Deps = ExprDependence::None;
+  Deps |= getDependenceInExpr(E->getNameInfo());
+  if (auto *Q = E->getQualifier())
+    Deps |= toExprDependence(Q->getDependence() &
+                             ~NestedNameSpecifierDependence::Dependent);
+  if (TemplateDecl *D = E->getDecl();
+      D && (D->getDeclContext()->isDependentContext() ||
+            isa<UnresolvedUsingValueDecl>(D)))
+    Deps |= ExprDependence::TypeValueInstantiation;
+  // If we have explicit template arguments, check for dependent
+  // template arguments and whether they contain any unexpanded pack
+  // expansions.
+  for (const auto &A : E->template_arguments())
+    Deps |= toExprDependence(A.getArgument().getDependence());
+  return Deps;
+}
+
 ExprDependence clang::computeDependence(CXXConstructExpr *E) {
   ExprDependence D =
       toExprDependenceForImpliedType(E->getType()->getDependence());

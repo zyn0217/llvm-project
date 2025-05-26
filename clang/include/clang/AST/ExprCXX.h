@@ -3425,6 +3425,164 @@ public:
   }
 };
 
+class UnresolvedTemplateExpr final
+    : public Expr,
+      private llvm::TrailingObjects<UnresolvedTemplateExpr,
+                                    ASTTemplateKWAndArgsInfo,
+                                    TemplateArgumentLoc> {
+  friend class ASTStmtReader;
+  friend class ASTStmtWriter;
+  friend TrailingObjects;
+
+  /// The nested-name-specifier that qualifies this unresolved
+  /// declaration name.
+  NestedNameSpecifierLoc QualifierLoc;
+
+  DeclarationNameInfo NameInfo;
+
+  TemplateDecl *Template;
+
+  UnresolvedTemplateExpr(QualType Ty, NestedNameSpecifierLoc QualifierLoc,
+                         SourceLocation TemplateKWLoc,
+                         const DeclarationNameInfo &NameInfo,
+                         TemplateDecl *Template,
+                         const TemplateArgumentListInfo *Args);
+
+  size_t numTrailingObjects(OverloadToken<ASTTemplateKWAndArgsInfo>) const {
+    return hasTemplateKWAndArgsInfo();
+  }
+
+  bool hasTemplateKWAndArgsInfo() const {
+    return UnresolvedTemplateExprBits.HasTemplateKWAndArgsInfo;
+  }
+
+  ASTTemplateKWAndArgsInfo *getTrailingASTTemplateKWAndArgsInfo() {
+    return getTrailingObjects<ASTTemplateKWAndArgsInfo>();
+  }
+
+  const ASTTemplateKWAndArgsInfo *getTrailingASTTemplateKWAndArgsInfo() const {
+    return const_cast<UnresolvedTemplateExpr *>(this)
+        ->getTrailingASTTemplateKWAndArgsInfo();
+  }
+
+  TemplateArgumentLoc *getTrailingTemplateArgumentLoc() {
+    return getTrailingObjects<TemplateArgumentLoc>();
+  }
+
+  const TemplateArgumentLoc *getTrailingTemplateArgumentLoc() const {
+    return const_cast<UnresolvedTemplateExpr *>(this)
+        ->getTrailingTemplateArgumentLoc();
+  }
+
+public:
+  static UnresolvedTemplateExpr *
+  Create(const ASTContext &Context, NestedNameSpecifierLoc QualifierLoc,
+         SourceLocation TemplateKWLoc, const DeclarationNameInfo &NameInfo,
+         TemplateDecl *Template, const TemplateArgumentListInfo *TemplateArgs);
+
+  static UnresolvedTemplateExpr *CreateEmpty(const ASTContext &Context,
+                                             bool HasTemplateKWAndArgsInfo,
+                                             unsigned NumTemplateArgs);
+
+  /// Retrieve the name that this expression refers to.
+  const DeclarationNameInfo &getNameInfo() const { return NameInfo; }
+
+  /// Retrieve the name that this expression refers to.
+  DeclarationName getDeclName() const { return NameInfo.getName(); }
+
+  /// Gets the location of the name.
+  SourceLocation getNameLoc() const { return NameInfo.getLoc(); }
+
+  /// Retrieve the location of the name within the expression.
+  ///
+  /// For example, in "X<T>::value" this is the location of "value".
+  SourceLocation getLocation() const { return NameInfo.getLoc(); }
+
+  /// Retrieve the nested-name-specifier that qualifies the
+  /// name, with source location information.
+  NestedNameSpecifierLoc getQualifierLoc() const { return QualifierLoc; }
+
+  /// Retrieve the nested-name-specifier that qualifies this
+  /// declaration.
+  NestedNameSpecifier *getQualifier() const {
+    return QualifierLoc.getNestedNameSpecifier();
+  }
+
+  TemplateDecl *getDecl() const { return Template; }
+
+  /// Retrieve the location of the template keyword preceding
+  /// this name, if any.
+  SourceLocation getTemplateKeywordLoc() const {
+    if (!hasTemplateKWAndArgsInfo())
+      return SourceLocation();
+    return getTrailingObjects<ASTTemplateKWAndArgsInfo>()->TemplateKWLoc;
+  }
+
+  /// Retrieve the location of the left angle bracket starting the
+  /// explicit template argument list following the name, if any.
+  SourceLocation getLAngleLoc() const {
+    if (!hasTemplateKWAndArgsInfo())
+      return SourceLocation();
+    return getTrailingObjects<ASTTemplateKWAndArgsInfo>()->LAngleLoc;
+  }
+
+  /// Retrieve the location of the right angle bracket ending the
+  /// explicit template argument list following the name, if any.
+  SourceLocation getRAngleLoc() const {
+    if (!hasTemplateKWAndArgsInfo())
+      return SourceLocation();
+    return getTrailingObjects<ASTTemplateKWAndArgsInfo>()->RAngleLoc;
+  }
+
+  /// Determines whether the name was preceded by the template keyword.
+  bool hasTemplateKeyword() const { return getTemplateKeywordLoc().isValid(); }
+
+  /// Determines whether this lookup had explicit template arguments.
+  bool hasExplicitTemplateArgs() const { return getLAngleLoc().isValid(); }
+
+  TemplateArgumentLoc const *getTemplateArgs() const {
+    if (!hasExplicitTemplateArgs())
+      return nullptr;
+
+    return getTrailingObjects<TemplateArgumentLoc>();
+  }
+
+  unsigned getNumTemplateArgs() const {
+    if (!hasExplicitTemplateArgs())
+      return 0;
+
+    return getTrailingObjects<ASTTemplateKWAndArgsInfo>()->NumTemplateArgs;
+  }
+
+  ArrayRef<TemplateArgumentLoc> template_arguments() const {
+    return {getTemplateArgs(), getNumTemplateArgs()};
+  }
+
+  SourceLocation getBeginLoc() const LLVM_READONLY {
+    if (NestedNameSpecifierLoc l = getQualifierLoc())
+      return l.getBeginLoc();
+    return getNameInfo().getBeginLoc();
+  }
+
+  SourceLocation getEndLoc() const LLVM_READONLY {
+    if (hasExplicitTemplateArgs())
+      return getRAngleLoc();
+    return getNameInfo().getEndLoc();
+  }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == UnresolvedTemplateExprClass;
+  }
+
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+
+  const_child_range children() const {
+    return const_child_range(const_child_iterator(), const_child_iterator());
+  }
+};
+
 /// A qualified reference to a name whose declaration cannot
 /// yet be resolved.
 ///

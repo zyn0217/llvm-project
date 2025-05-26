@@ -133,6 +133,7 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::DependentCoawaitExprClass:
   case Expr::CXXDependentScopeMemberExprClass:
   case Expr::DependentScopeDeclRefExprClass:
+  case Expr::UnresolvedTemplateExprClass:
     // ObjC instance variables are lvalues
     // FIXME: ObjC++0x might have different rules
   case Expr::ObjCIvarRefExprClass:

@@ -1364,6 +1364,7 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
   case Expr::FunctionParmPackExprClass:
   case Expr::UnaryExprOrTypeTraitExprClass:
   case Expr::UnresolvedLookupExprClass:
+  case Expr::UnresolvedTemplateExprClass:
   case Expr::UnresolvedMemberExprClass:
   case Expr::TypoExprClass:
     // FIXME: Many of the above can throw.

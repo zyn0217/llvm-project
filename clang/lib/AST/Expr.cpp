@@ -2822,6 +2822,7 @@ bool Expr::isUnusedResultAWarning(const Expr *&WarnE, SourceLocation &Loc,
 
   // If we don't know precisely what we're looking at, let's not warn.
   case UnresolvedLookupExprClass:
+  case UnresolvedTemplateExprClass:
   case CXXUnresolvedConstructExprClass:
   case RecoveryExprClass:
     return false;
@@ -3626,6 +3627,7 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
     llvm_unreachable("unexpected Expr kind");
 
   case DependentScopeDeclRefExprClass:
+  case UnresolvedTemplateExprClass:
   case CXXUnresolvedConstructExprClass:
   case CXXDependentScopeMemberExprClass:
   case UnresolvedLookupExprClass:

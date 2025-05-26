@@ -14826,6 +14826,48 @@ TreeTransform<Derived>::TransformUnresolvedLookupExpr(UnresolvedLookupExpr *Old,
                                             Old->requiresADL(), &TransArgs);
 }
 
+template <typename Derived>
+ExprResult TreeTransform<Derived>::TransformUnresolvedTemplateExpr(
+    UnresolvedTemplateExpr *Old) {
+  NamedDecl *InstD = cast_if_present<NamedDecl>(
+      getDerived().TransformDecl(Old->getNameLoc(), Old->getDecl()));
+
+  if (!InstD)
+    return ExprError();
+
+  CXXScopeSpec SS;
+  if (Old->getQualifierLoc()) {
+    NestedNameSpecifierLoc QualifierLoc =
+        getDerived().TransformNestedNameSpecifierLoc(Old->getQualifierLoc());
+    if (!QualifierLoc)
+      return ExprError();
+
+    SS.Adopt(QualifierLoc);
+  }
+
+  // Rebuild the template arguments, if any.
+  SourceLocation TemplateKWLoc = Old->getTemplateKeywordLoc();
+  TemplateArgumentListInfo TransArgs(Old->getLAngleLoc(), Old->getRAngleLoc());
+  if (Old->hasExplicitTemplateArgs() &&
+      getDerived().TransformTemplateArguments(
+          Old->getTemplateArgs(), Old->getNumTemplateArgs(), TransArgs)) {
+    return ExprError();
+  }
+
+  LookupResult R(SemaRef, Old->getDeclName(), Old->getNameLoc(),
+                 Sema::LookupOrdinaryName);
+  R.addDecl(InstD);
+
+  // If we have neither explicit template arguments, nor the template keyword,
+  // it's a normal declaration name or member reference.
+  if (!Old->hasExplicitTemplateArgs() && !TemplateKWLoc.isValid())
+    return getDerived().RebuildDeclarationNameExpr(SS, R, /*RequiresADL=*/false);
+
+  // If we have template arguments, then rebuild the template-id expression.
+  return getDerived().RebuildTemplateIdExpr(SS, TemplateKWLoc, R,
+                                            /*RequiresADL=*/false, &TransArgs);
+}
+
 template<typename Derived>
 ExprResult
 TreeTransform<Derived>::TransformTypeTraitExpr(TypeTraitExpr *E) {

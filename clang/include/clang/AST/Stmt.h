@@ -985,6 +985,20 @@ protected:
     unsigned HasTemplateKWAndArgsInfo : 1;
   };
 
+  class UnresolvedTemplateExprBitfields {
+    friend class ASTStmtReader;
+    friend class ASTStmtWriter;
+    friend class UnresolvedTemplateExpr;
+
+    LLVM_PREFERRED_TYPE(ExprBitfields)
+    unsigned : NumExprBits;
+
+    /// Whether the name includes info for explicit template
+    /// keyword and arguments.
+    LLVM_PREFERRED_TYPE(bool)
+    unsigned HasTemplateKWAndArgsInfo : 1;
+  };
+
   class CXXConstructExprBitfields {
     friend class ASTStmtReader;
     friend class CXXConstructExpr;
@@ -1293,6 +1307,7 @@ protected:
     CXXDeleteExprBitfields CXXDeleteExprBits;
     TypeTraitExprBitfields TypeTraitExprBits;
     DependentScopeDeclRefExprBitfields DependentScopeDeclRefExprBits;
+    UnresolvedTemplateExprBitfields UnresolvedTemplateExprBits;
     CXXConstructExprBitfields CXXConstructExprBits;
     ExprWithCleanupsBitfields ExprWithCleanupsBits;
     CXXUnresolvedConstructExprBitfields CXXUnresolvedConstructExprBits;

@@ -1380,6 +1380,16 @@ void StmtPrinter::VisitUnresolvedLookupExpr(UnresolvedLookupExpr *Node) {
     printTemplateArgumentList(OS, Node->template_arguments(), Policy);
 }
 
+void StmtPrinter::VisitUnresolvedTemplateExpr(UnresolvedTemplateExpr *Node) {
+  if (Node->getQualifier())
+    Node->getQualifier()->print(OS, Policy);
+  if (Node->hasTemplateKeyword())
+    OS << "template ";
+  OS << Node->getNameInfo();
+  if (Node->hasExplicitTemplateArgs())
+    printTemplateArgumentList(OS, Node->template_arguments(), Policy);
+}
+
 static bool isImplicitSelf(const Expr *E) {
   if (const auto *DRE = dyn_cast<DeclRefExpr>(E)) {
     if (const auto *PD = dyn_cast<ImplicitParamDecl>(DRE->getDecl())) {

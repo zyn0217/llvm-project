@@ -306,6 +306,7 @@ public:
   void VisitMaterializeTemporaryExpr(const MaterializeTemporaryExpr *Node);
   void VisitExprWithCleanups(const ExprWithCleanups *Node);
   void VisitUnresolvedLookupExpr(const UnresolvedLookupExpr *Node);
+  void VisitUnresolvedTemplateExpr(const UnresolvedTemplateExpr *Node);
   void VisitSizeOfPackExpr(const SizeOfPackExpr *Node);
   void
   VisitCXXDependentScopeMemberExpr(const CXXDependentScopeMemberExpr *Node);

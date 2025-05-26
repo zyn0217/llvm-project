@@ -4730,7 +4730,7 @@ ExprResult Sema::BuildTemplateIdExpr(const CXXScopeSpec &SS,
   }
   bool KnownDependent = false;
   // In C++1y, check variable template ids.
-  if (R.getAsSingle<VarTemplateDecl>()) {
+  if (auto *VD = R.getAsSingle<VarTemplateDecl>()) {
     ExprResult Res = CheckVarTemplateId(
         SS, R.getLookupNameInfo(), R.getAsSingle<VarTemplateDecl>(),
         R.getRepresentativeDecl(), TemplateKWLoc, TemplateArgs);
@@ -4738,6 +4738,9 @@ ExprResult Sema::BuildTemplateIdExpr(const CXXScopeSpec &SS,
       return Res;
     // Result is dependent. Carry on to build an UnresolvedLookupExpr.
     KnownDependent = true;
+    return UnresolvedTemplateExpr::Create(
+        Context, SS.getWithLocInContext(Context), TemplateKWLoc,
+        R.getLookupNameInfo(), VD, TemplateArgs);
   }
 
   if (R.getAsSingle<ConceptDecl>()) {

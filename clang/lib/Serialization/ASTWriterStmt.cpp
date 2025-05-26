@@ -16,9 +16,11 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclTemplate.h"
+#include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprOpenMP.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Lex/Token.h"
+#include "clang/Serialization/ASTBitCodes.h"
 #include "clang/Serialization/ASTReader.h"
 #include "clang/Serialization/ASTRecordWriter.h"
 #include "llvm/Bitstream/BitstreamWriter.h"
@@ -2101,6 +2103,24 @@ void ASTStmtWriter::VisitOverloadExpr(OverloadExpr *E) {
 
   Record.AddDeclarationNameInfo(E->getNameInfo());
   Record.AddNestedNameSpecifierLoc(E->getQualifierLoc());
+}
+
+void ASTStmtWriter::VisitUnresolvedTemplateExpr(UnresolvedTemplateExpr *E) {
+  VisitExpr(E);
+
+  CurrentPackingBits.updateBits();
+  CurrentPackingBits.addBit(E->hasTemplateKWAndArgsInfo());
+  if (E->hasTemplateKWAndArgsInfo()) {
+    const ASTTemplateKWAndArgsInfo &ArgInfo =
+        *E->getTrailingASTTemplateKWAndArgsInfo();
+    Record.push_back(ArgInfo.NumTemplateArgs);
+    AddTemplateKWAndArgsInfo(ArgInfo, E->getTrailingTemplateArgumentLoc());
+  }
+
+  Record.AddDeclRef(E->getDecl());
+  Record.AddDeclarationNameInfo(E->getNameInfo());
+  Record.AddNestedNameSpecifierLoc(E->getQualifierLoc());
+  Code = serialization::EXPR_CXX_UNRESOLVED_TEMPLATE_EXPR;
 }
 
 void ASTStmtWriter::VisitUnresolvedMemberExpr(UnresolvedMemberExpr *E) {

@@ -1902,6 +1902,7 @@ enum StmtCode {
   EXPR_CXX_UNRESOLVED_CONSTRUCT,     // CXXUnresolvedConstructExpr
   EXPR_CXX_UNRESOLVED_MEMBER,        // UnresolvedMemberExpr
   EXPR_CXX_UNRESOLVED_LOOKUP,        // UnresolvedLookupExpr
+  EXPR_CXX_UNRESOLVED_TEMPLATE_EXPR, // UnresolvedTemplateExpr
 
   EXPR_CXX_EXPRESSION_TRAIT, // ExpressionTraitExpr
   EXPR_CXX_NOEXCEPT,         // CXXNoexceptExpr

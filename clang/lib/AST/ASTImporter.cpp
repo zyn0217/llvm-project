@@ -662,6 +662,7 @@ namespace clang {
     ExpectedStmt VisitCXXUnresolvedConstructExpr(CXXUnresolvedConstructExpr *E);
     ExpectedStmt VisitUnresolvedLookupExpr(UnresolvedLookupExpr *E);
     ExpectedStmt VisitUnresolvedMemberExpr(UnresolvedMemberExpr *E);
+    ExpectedStmt VisitUnresolvedTemplateExpr(UnresolvedTemplateExpr *E);
     ExpectedStmt VisitExprWithCleanups(ExprWithCleanups *E);
     ExpectedStmt VisitCXXThisExpr(CXXThisExpr *E);
     ExpectedStmt VisitCXXBoolLiteralExpr(CXXBoolLiteralExpr *E);
@@ -8656,6 +8657,45 @@ ASTNodeImporter::VisitUnresolvedLookupExpr(UnresolvedLookupExpr *E) {
       ToNameInfo, E->requiresADL(), ToDecls.begin(), ToDecls.end(),
       /*KnownDependent=*/E->isTypeDependent(),
       /*KnownInstantiationDependent=*/E->isInstantiationDependent());
+}
+
+ExpectedStmt
+ASTNodeImporter::VisitUnresolvedTemplateExpr(UnresolvedTemplateExpr *E) {
+  auto ToQualifierLocOrErr = import(E->getQualifierLoc());
+  if (!ToQualifierLocOrErr)
+    return ToQualifierLocOrErr.takeError();
+
+  ExpectedSLoc ToTemplateKeywordLocOrErr = import(E->getTemplateKeywordLoc());
+  if (!ToTemplateKeywordLocOrErr)
+    return ToTemplateKeywordLocOrErr.takeError();
+
+  Error Err = Error::success();
+  auto ToName = importChecked(Err, E->getDeclName());
+  auto ToNameLoc = importChecked(Err, E->getNameLoc());
+  if (Err)
+    return std::move(Err);
+  DeclarationNameInfo ToNameInfo(ToName, ToNameLoc);
+
+  // Import additional name location/type info.
+  if (Error Err = ImportDeclarationNameLoc(E->getNameInfo(), ToNameInfo))
+    return std::move(Err);
+
+  auto ToDOrErr = import(E->getDecl());
+  if (!ToDOrErr)
+    return ToDOrErr.takeError();
+
+  TemplateArgumentListInfo ToTAInfo;
+  if (E->hasExplicitTemplateArgs()) {
+    if (Error Err =
+            ImportTemplateArgumentListInfo(E->getLAngleLoc(), E->getRAngleLoc(),
+                                           E->template_arguments(), ToTAInfo))
+      return std::move(Err);
+  }
+
+  return UnresolvedTemplateExpr::Create(
+      Importer.getToContext(), *ToQualifierLocOrErr, *ToTemplateKeywordLocOrErr,
+      ToNameInfo, *ToDOrErr,
+      E->hasExplicitTemplateArgs() ? &ToTAInfo : nullptr);
 }
 
 ExpectedStmt

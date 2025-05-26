@@ -2134,6 +2134,29 @@ void ASTStmtReader::VisitUnresolvedLookupExpr(UnresolvedLookupExpr *E) {
   E->NamingClass = readDeclAs<CXXRecordDecl>();
 }
 
+void ASTStmtReader::VisitUnresolvedTemplateExpr(UnresolvedTemplateExpr *E) {
+  VisitExpr(E);
+
+  CurrentUnpackingBits.emplace(Record.readInt());
+  bool HasTemplateKWAndArgsInfo = CurrentUnpackingBits->getNextBit();
+  assert((E->hasTemplateKWAndArgsInfo() == HasTemplateKWAndArgsInfo) &&
+         "Wrong HasTemplateKWAndArgsInfo!");
+
+  if (HasTemplateKWAndArgsInfo) {
+    unsigned NumTemplateArgs = Record.readInt();
+    ReadTemplateKWAndArgsInfo(*E->getTrailingASTTemplateKWAndArgsInfo(),
+                              E->getTrailingTemplateArgumentLoc(),
+                              NumTemplateArgs);
+    assert((E->getNumTemplateArgs() == NumTemplateArgs) &&
+           "Wrong NumTemplateArgs!");
+  }
+
+  auto *D = readDeclAs<TemplateDecl>();
+  E->Template = D;
+  E->NameInfo = Record.readDeclarationNameInfo();
+  E->QualifierLoc = Record.readNestedNameSpecifierLoc();
+}
+
 void ASTStmtReader::VisitTypeTraitExpr(TypeTraitExpr *E) {
   VisitExpr(E);
   E->TypeTraitExprBits.IsBooleanTypeTrait = Record.readInt();
@@ -4298,6 +4321,17 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
                                  : 0;
       S = UnresolvedLookupExpr::CreateEmpty(
           Context, NumResults, HasTemplateKWAndArgsInfo, NumTemplateArgs);
+      break;
+    }
+
+    case EXPR_CXX_UNRESOLVED_TEMPLATE_EXPR: {
+      BitsUnpacker OverloadExprBits(Record[ASTStmtReader::NumExprFields]);
+      auto HasTemplateKWAndArgsInfo = OverloadExprBits.getNextBit();
+      auto NumTemplateArgs = HasTemplateKWAndArgsInfo
+                                 ? Record[ASTStmtReader::NumExprFields + 1]
+                                 : 0;
+      S = UnresolvedTemplateExpr::CreateEmpty(Context, HasTemplateKWAndArgsInfo,
+                                              NumTemplateArgs);
       break;
     }
 

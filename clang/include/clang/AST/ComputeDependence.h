@@ -70,6 +70,7 @@ class DependentCoawaitExpr;
 class CXXNewExpr;
 class CXXPseudoDestructorExpr;
 class OverloadExpr;
+class UnresolvedTemplateExpr;
 class DependentScopeDeclRefExpr;
 class CXXConstructExpr;
 class CXXTemporaryObjectExpr;
@@ -162,6 +163,7 @@ ExprDependence computeDependence(CXXPseudoDestructorExpr *E);
 ExprDependence computeDependence(OverloadExpr *E, bool KnownDependent,
                                  bool KnownInstantiationDependent,
                                  bool KnownContainsUnexpandedParameterPack);
+ExprDependence computeDependence(UnresolvedTemplateExpr *E);
 ExprDependence computeDependence(DependentScopeDeclRefExpr *E);
 ExprDependence computeDependence(CXXConstructExpr *E);
 ExprDependence computeDependence(CXXTemporaryObjectExpr *E);

@@ -1733,6 +1733,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
     case Stmt::ArrayTypeTraitExprClass:
     case Stmt::ExpressionTraitExprClass:
     case Stmt::UnresolvedLookupExprClass:
+    case Stmt::UnresolvedTemplateExprClass:
     case Stmt::UnresolvedMemberExprClass:
     case Stmt::TypoExprClass:
     case Stmt::RecoveryExprClass:

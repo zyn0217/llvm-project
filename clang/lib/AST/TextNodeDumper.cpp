@@ -15,6 +15,7 @@
 #include "clang/AST/DeclFriend.h"
 #include "clang/AST/DeclOpenMP.h"
 #include "clang/AST/DeclTemplate.h"
+#include "clang/AST/ExprCXX.h"
 #include "clang/AST/LocInfoType.h"
 #include "clang/AST/NestedNameSpecifier.h"
 #include "clang/AST/Type.h"
@@ -1559,6 +1560,13 @@ void TextNodeDumper::VisitUnresolvedLookupExpr(
     OS << " empty";
   for (; I != E; ++I)
     dumpPointer(*I);
+}
+
+void TextNodeDumper::VisitUnresolvedTemplateExpr(
+    const UnresolvedTemplateExpr *Node) {
+  OS << " " << Node->getNameInfo();
+
+  dumpDeclRef(Node->getDecl());
 }
 
 void TextNodeDumper::VisitObjCIvarRefExpr(const ObjCIvarRefExpr *Node) {

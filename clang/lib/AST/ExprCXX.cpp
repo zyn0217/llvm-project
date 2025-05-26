@@ -561,6 +561,57 @@ DependentScopeDeclRefExpr::CreateEmpty(const ASTContext &Context,
   return E;
 }
 
+UnresolvedTemplateExpr::UnresolvedTemplateExpr(
+    QualType Ty, NestedNameSpecifierLoc QualifierLoc,
+    SourceLocation TemplateKWLoc, const DeclarationNameInfo &NameInfo,
+    TemplateDecl *Template, const TemplateArgumentListInfo *Args)
+    : Expr(UnresolvedTemplateExprClass, Ty, VK_LValue, OK_Ordinary),
+      QualifierLoc(QualifierLoc), NameInfo(NameInfo), Template(Template) {
+  UnresolvedTemplateExprBits.HasTemplateKWAndArgsInfo =
+      (Args != nullptr) || TemplateKWLoc.isValid();
+  if (Args) {
+    auto Deps = TemplateArgumentDependence::None;
+    getTrailingObjects<ASTTemplateKWAndArgsInfo>()->initializeFrom(
+        TemplateKWLoc, *Args, getTrailingObjects<TemplateArgumentLoc>(), Deps);
+  } else if (TemplateKWLoc.isValid()) {
+    getTrailingObjects<ASTTemplateKWAndArgsInfo>()->initializeFrom(
+        TemplateKWLoc);
+  }
+  setDependence(computeDependence(this));
+}
+
+UnresolvedTemplateExpr *UnresolvedTemplateExpr::Create(
+    const ASTContext &Context, NestedNameSpecifierLoc QualifierLoc,
+    SourceLocation TemplateKWLoc, const DeclarationNameInfo &NameInfo,
+    TemplateDecl *Template,
+    const TemplateArgumentListInfo *Args) {
+  bool HasTemplateKWAndArgsInfo = Args || TemplateKWLoc.isValid();
+  std::size_t Size =
+      totalSizeToAlloc<ASTTemplateKWAndArgsInfo, TemplateArgumentLoc>(
+          HasTemplateKWAndArgsInfo, Args ? Args->size() : 0);
+  void *Mem = Context.Allocate(Size);
+  return new (Mem)
+      UnresolvedTemplateExpr(Context.DependentTy, QualifierLoc, TemplateKWLoc,
+                             NameInfo, Template, Args);
+}
+
+UnresolvedTemplateExpr *
+UnresolvedTemplateExpr::CreateEmpty(const ASTContext &Context,
+                                    bool HasTemplateKWAndArgsInfo,
+                                    unsigned NumTemplateArgs) {
+  assert(NumTemplateArgs == 0 || HasTemplateKWAndArgsInfo);
+  std::size_t Size =
+      totalSizeToAlloc<ASTTemplateKWAndArgsInfo, TemplateArgumentLoc>(
+          HasTemplateKWAndArgsInfo, NumTemplateArgs);
+  void *Mem = Context.Allocate(Size);
+  auto *E = new (Mem) UnresolvedTemplateExpr(
+      QualType(), NestedNameSpecifierLoc(), SourceLocation(),
+      DeclarationNameInfo(), nullptr, nullptr);
+  E->UnresolvedTemplateExprBits.HasTemplateKWAndArgsInfo =
+      HasTemplateKWAndArgsInfo;
+  return E;
+}
+
 SourceLocation CXXConstructExpr::getBeginLoc() const {
   if (const auto *TOE = dyn_cast<CXXTemporaryObjectExpr>(this))
     return TOE->getBeginLoc();
