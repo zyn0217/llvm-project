@@ -734,7 +734,7 @@ ExprResult CalculateConstraintSatisfaction::Calculate(
       llvm::errs() << "\n";
     }
     assert(Iter->second.E == Constraint.getConstraintExpr());
-#ifndef NDEBUG
+#endif
     return Iter->second.SubstExpr;
 #else
 #endif
@@ -765,7 +765,7 @@ ExprResult CalculateConstraintSatisfaction::Calculate(
       llvm::errs() << "\n";
     }
     assert(Iter->second.E == Constraint.getConstraintExpr());
-#ifndef NDEBUG
+#endif
     return Iter->second.SubstExpr;
 #endif
   }
@@ -776,7 +776,9 @@ ExprResult CalculateConstraintSatisfaction::Calculate(
   std::copy(Satisfaction.Details.begin() + Size, Satisfaction.Details.end(),
             std::back_inserter(Cache.Satisfaction.Details));
   Cache.SubstExpr = E;
+#ifndef NDEBUG
   Cache.E = Constraint.getConstraintExpr();
+#endif
   S.ConceptIdSatisfactionCache.insert({ID, std::move(Cache)});
 #undef UseCache
 
