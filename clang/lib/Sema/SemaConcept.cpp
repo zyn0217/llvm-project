@@ -28,8 +28,12 @@
 #include "clang/Sema/TemplateDeduction.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PointerUnion.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/SaveAndRestore.h"
+#include "llvm/Support/TimeProfiler.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
 using namespace sema;
@@ -636,6 +640,37 @@ ExprResult ConstraintSatisfactionChecker::EvaluateSlow(
     const AtomicConstraint &Constraint,
     const MultiLevelTemplateArgumentList &MLTAL) {
 
+  std::optional<llvm::TimeTraceScope> TTS;
+  TTS.emplace("CheckConstraintSatisfaction - EvaluateAtomic - "
+              "SubstitutionInTemplateArguments",
+              [&] {
+                std::string PrettyExpr;
+                llvm::raw_string_ostream RSO(PrettyExpr);
+                Constraint.getConstraintExpr()->printPretty(
+                    RSO, nullptr, S.Context.getPrintingPolicy());
+                if (Constraint.hasParameterMapping()) {
+                  if (Constraint.getParameterMapping().empty())
+                    return llvm::formatv("{0} <>", PrettyExpr).str();
+                  std::string Mapping, MappingCanonical;
+                  llvm::raw_string_ostream RSO(Mapping), RSO2(MappingCanonical);
+                  llvm::interleaveComma(Constraint.getParameterMapping(), RSO,
+                                        [&](const TemplateArgumentLoc &TA) {
+                                          TA.getArgument().print(
+                                              S.Context.getPrintingPolicy(),
+                                              RSO, /*IncludeType=*/false);
+                                        });
+                  // llvm::interleaveComma(
+                  //     Constraint.getParameterMapping(), RSO2,
+                  //     [&](const TemplateArgumentLoc &TA) {
+                  //       S.Context.getCanonicalTemplateArgument(TA.getArgument())
+                  //           .print(S.Context.getPrintingPolicy(), RSO2,
+                  //                  /*IncludeType=*/false);
+                  //     });
+                  return llvm::formatv("{0} <{1}>", PrettyExpr, Mapping).str();
+                }
+                return llvm::formatv("{0} <null>", PrettyExpr).str();
+              });
+
   llvm::SmallVector<TemplateArgument> SubstitutedOutermost;
   std::optional<MultiLevelTemplateArgumentList> SubstitutedArgs =
       SubstitutionInTemplateArguments(Constraint, MLTAL, SubstitutedOutermost);
@@ -643,7 +678,22 @@ ExprResult ConstraintSatisfactionChecker::EvaluateSlow(
     Satisfaction.IsSatisfied = false;
     return ExprEmpty();
   }
+  TTS.reset();
 
+  TTS.emplace("CheckConstraintSatisfaction - EvaluateAtomic - "
+              "EvaluateAtomicConstraint",
+              [&] {
+                std::string PrettyExpr, TempArgs;
+                llvm::raw_string_ostream RSO(PrettyExpr), RSO2(TempArgs);
+                Constraint.getConstraintExpr()->printPretty(
+                    RSO, nullptr, S.Context.getPrintingPolicy());
+                llvm::interleaveComma(SubstitutedOutermost, RSO2,
+                                      [&](const TemplateArgument &TA) {
+                                        TA.print(S.Context.getPrintingPolicy(),
+                                                 RSO2, /*IncludeType=*/false);
+                                      });
+                return llvm::formatv("{0} <{1}>", PrettyExpr, TempArgs).str();
+              });
   Sema::ArgPackSubstIndexRAII SubstIndex(S, PackSubstitutionIndex);
   ExprResult SubstitutedAtomicExpr = EvaluateAtomicConstraint(
       Constraint.getConstraintExpr(), *SubstitutedArgs);
@@ -1089,6 +1139,21 @@ static bool CheckConstraintSatisfaction(
     SourceRange TemplateIDRange, ConstraintSatisfaction &Satisfaction,
     Expr **ConvertedExpr, const ConceptReference *TopLevelConceptId = nullptr) {
 
+  llvm::TimeTraceScope TimeScope("CheckConstraintSatisfaction", [&] {
+    if (Template) {
+      std::string Name;
+      llvm::raw_string_ostream RSO(Name);
+      Template->getNameForDiagnostic(RSO, S.Context.getPrintingPolicy(),
+                                     /*Qualified=*/false);
+      return llvm::formatv("{0} {1}", Name, AssociatedConstraints.size()).str();
+    }
+    return llvm::formatv(
+               "{0} {1}",
+               TemplateIDRange.printToString(S.Context.getSourceManager()),
+               AssociatedConstraints.size())
+        .str();
+  });
+
   if (ConvertedExpr)
     *ConvertedExpr = nullptr;
 
@@ -1115,6 +1180,23 @@ static bool CheckConstraintSatisfaction(
                              TemplateIDRange);
   }
 
+  std::optional<llvm::TimeTraceScope> TTS(
+      std::in_place, "CheckConstraintSatisfaction - Normalize", [&] {
+        if (Template) {
+          std::string Name;
+          llvm::raw_string_ostream RSO(Name);
+          Template->getNameForDiagnostic(
+                        RSO, S.Context.getPrintingPolicy(), /*Qualified=*/false);
+          return llvm::formatv("{0} {1}", Name, AssociatedConstraints.size())
+              .str();
+        }
+        return llvm::formatv(
+                   "{0} {1}",
+                   TemplateIDRange.printToString(S.Context.getSourceManager()),
+                   AssociatedConstraints.size())
+            .str();
+      });
+
   const NormalizedConstraint *C =
       S.getNormalizedAssociatedConstraints(Template, AssociatedConstraints);
   if (!C) {
@@ -1122,11 +1204,28 @@ static bool CheckConstraintSatisfaction(
     return true;
   }
 
+  TTS.reset();
+
   if (TopLevelConceptId)
     C = ConceptIdConstraint::Create(S.getASTContext(), TopLevelConceptId,
                                     const_cast<NormalizedConstraint *>(C),
                                     Template, /*CSE=*/nullptr,
                                     S.ArgPackSubstIndex);
+
+  TTS.emplace("CheckConstraintSatisfaction - Evaluate", [&] {
+    if (Template) {
+      std::string Name;
+      llvm::raw_string_ostream RSO(Name);
+      Template->getNameForDiagnostic(RSO, S.Context.getPrintingPolicy(),
+                                     /*Qualified=*/false);
+      return llvm::formatv("{0} {1}", Name, AssociatedConstraints.size()).str();
+    }
+    return llvm::formatv(
+               "{0} {1}",
+               TemplateIDRange.printToString(S.Context.getSourceManager()),
+               AssociatedConstraints.size())
+        .str();
+  });
 
   ExprResult Res =
       ConstraintSatisfactionChecker(S, Template, TemplateIDRange.getBegin(),
