@@ -2030,6 +2030,8 @@ static void diagnoseUnsatisfiedConstraintExpr(
 }
 
 void Sema::DiagnoseUnsatisfiedRequiresExpr(const RequiresExpr *RE, bool First) {
+  if (isSFINAEContext())
+    return;
   // FIXME: RequiresExpr should store dependent diagnostics.
   for (concepts::Requirement *Req : RE->getRequirements())
     if (!Req->isDependent() && !Req->isSatisfied()) {
@@ -2050,6 +2052,8 @@ void Sema::DiagnoseUnsatisfiedConstraint(
 
   assert(!Satisfaction.IsSatisfied &&
          "Attempted to diagnose a satisfied constraint");
+  if (isSFINAEContext())
+    return;
   ::DiagnoseUnsatisfiedConstraint(*this, Satisfaction.Details, Loc, First);
 }
 
@@ -2061,6 +2065,8 @@ void Sema::DiagnoseUnsatisfiedConstraint(
 
   assert(!Satisfaction.isSatisfied() &&
          "Attempted to diagnose a satisfied constraint");
+  if (isSFINAEContext())
+    return;
 
   ::DiagnoseUnsatisfiedConstraint(*this, Satisfaction.records(),
                                   ConstraintExpr->getBeginLoc(), First);
